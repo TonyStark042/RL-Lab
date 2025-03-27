@@ -3,29 +3,12 @@ import numpy as np
 import os
 from matplotlib import pyplot as plt
 import torch
-from collections import deque
-import random
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict
 from abc import ABC, abstractmethod
+from args import *
 
 noDeepLearning = ["Q-Learning", "Sarsa"]
-
-@dataclass(kw_only=True)
-class Args:
-    alg_name:str = None
-    model_name:str = None
-    epochs:int = np.inf
-    reward_threshold:float = None
-    early_stop:bool = True
-    baseline:float = 0
-    gamma:float = 0.99
-    lr:float = 1e-4
-    h_size:int = 32
-    window_size:int = 10
-    custom_args: dict = field(default_factory=dict)
-
-    def __post_init__(self):
-        pass
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 class RL(ABC):
     def __init__(self, 
@@ -33,7 +16,7 @@ class RL(ABC):
                  args,
                  **kwargs,
                  ):
-        # env related attributes
+        ## env related attributes ##
         self.env = env
         self.action_space = self.env.action_space
         self.action_num =  sum(self.env.action_space.shape) if type(env.action_space) == gym.spaces.box.Box else self.env.action_space.n
@@ -41,25 +24,40 @@ class RL(ABC):
         self.state_num = sum(self.env.observation_space.shape) if type(env.observation_space) == gym.spaces.box.Box else self.env.observation_space.n
         self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # hyperparameters
+        ## hyperparameters, loading from arguments ##
+        self.alg_name:str = None
+        self.model_name:str = None
+        self.epochs:int = np.inf
+        self.reward_threshold:float = None
+        self.early_stop:bool = True
+        self.baseline:float = 0
+        self.gamma:float = 0.99
+        self.lr:float = 1e-4
+        self.h_size:int = 32
+        self.window_size:int = 10
+        ## training related attributes, fixed initial value ##
+        self.rewards_record = []
+        self.optimal_reward = 0
+        self.sample_count = 0
+        self.best = None
+        self.report_freq = 10
+        ## logger ##
+        self.logger = logging.getLogger(name=self.alg_name)
+        ## loading asigned arguments from args ##
         default_args = asdict(Args()) if args is None else asdict(args)
         if args and hasattr(args, 'custom_args'):
             default_args.update(args.custom_args)
         default_args.update(kwargs)
         for k, v in default_args.items():
             setattr(self, k, v)
+        ## check the arguments ##
         self._check_args()
-        # training related attributes, fixed initial value
-        self.rewards_record = []
-        self.optimal_reward = 0
-        self.sample_count = 0
-        self.best = None
-    
+
+
     def _check_args(self):
         """
         Check some key argument values and print all hyperparameters.
         """
-
         if self.reward_threshold is None or self.reward_threshold == 0:
             self.reward_threshold = np.inf if self.env.spec.reward_threshold is None else self.env.spec.reward_threshold
         elif self.reward_threshold < 0:
@@ -75,14 +73,14 @@ class RL(ABC):
         print(''.join(['=']*140)) 
 
         if self.max_episode_steps is None:
-            print("Warning: max_episode_steps is not specified, please make sure the env must have an end.")
+            self.logger.warning("max_episode_steps is not specified, please make sure the env must have an end.")
         if self.model_name is None and self.alg_name not in noDeepLearning:
             raise ValueError("Please specify the name of learnable policy net, which will be used in saving and updating best model")
         if self.alg_name is None:
             raise ValueError("Please specify the name of the algorithm, which will be used in saving model and learning curve")
         if self.epochs is np.inf:
             if self.early_stop:
-                print("Warning: epochs is not specified, the training will continue until reward_threshold are met.")
+                self.logger.warning("epochs is not specified, the training will continue until reward_threshold are met.")
             else:
                 raise ValueError("Please specify the number of epochs for training, or set the early_stop to True.")
 
@@ -93,11 +91,11 @@ class RL(ABC):
     @abstractmethod
     def train(self):
         raise NotImplementedError("Subclasses must implement train()")
-    
+
     @abstractmethod
     def _update(self):
         raise NotImplementedError("Subclasses must implement _update()")
-    
+
     def report(self, epoch, **kwargs) -> bool:
         """
         Report the model reward situation in rencent <window_size> episode, and save the best model.
@@ -105,30 +103,29 @@ class RL(ABC):
             epoch: The current episode;
             early_stop: Default Fasle, if True, model will stop training if meet the reward_threshold conditions,.
         """
-        if len(self.rewards_record) <= 10:
-            avg_10_reward = sum(self.rewards_record) / len(self.rewards_record)
+        if len(self.rewards_record) <= self.report_freq:
+            avg_n_reward = sum(self.rewards_record) / len(self.rewards_record)
         else:
-            avg_10_reward = sum(self.rewards_record[-self.window_size:])/self.window_size
+            avg_n_reward = sum(self.rewards_record[-self.window_size:])/self.window_size
 
         optimal_reward = self.evaluate()
         if optimal_reward >= self.optimal_reward and self.alg_name not in noDeepLearning:
             self.optimal_reward = optimal_reward
             state_dict = getattr(self, self.model_name)
             self.best = state_dict
-        
-        if epoch % 10 == 0:       
-            print(f"Episode: {epoch}\tAverage {self.window_size}reward: {avg_10_reward:.3f}\tOptimal reward: {optimal_reward}\tHistory optimal: {self.optimal_reward}", end='\t')
+
+        if epoch % self.report_freq == 0:
+            message = f"Episode: {epoch} | Average {self.window_size} | reward: {avg_n_reward:.3f} | Optimal reward: {optimal_reward} | History optimal: {self.optimal_reward} "
             for k,v in kwargs.items():
-                print(f"{k}: {v:.3f}", end='\t')
-            else:
-                print()
+                message += f"| {k}: {v:.3f} "
+            self.logger.info(message)
 
         if self.early_stop:
-            if avg_10_reward >= self.reward_threshold and optimal_reward >= self.reward_threshold:
-                print(f"Converged at epoch: {epoch}, final optimal reward: {optimal_reward}")
+            if avg_n_reward >= self.reward_threshold and optimal_reward >= self.reward_threshold:
+                self.logger.info(f"Converged at epoch: {epoch}, final optimal reward: {optimal_reward}")
                 return True
         return False
-    
+
     def evaluate(self):
         """
         Evaluate the model's performence by choosing the most likly or most valuable action.
@@ -142,7 +139,7 @@ class RL(ABC):
             if terminated or truncated:
                 break
         return rewards   
-    
+
     def learning_curve(self):
         """
         Plot and save the learning curve with optional moving average and visualization.
@@ -167,7 +164,6 @@ class RL(ABC):
                                     mode='valid') # only start calculating when epoch >= 10
             plt.plot(episodes[self.window_size-1:], moving_avg, 
                     color='blue', label=f'Moving Average (n={self.window_size})')
-        # plt.text(0.05, 0.95, self.lr, transform=plt.gca().transAxes,  fontsize=12)
 
         plt.grid(True, alpha=0.3)
         plt.title(self.env.spec.id)
@@ -178,7 +174,6 @@ class RL(ABC):
         save_path = os.path.join(result_path, f"{name}.png")
         plt.savefig(save_path, bbox_inches='tight', dpi=300)         
         print(f"Learning curve has been saved to {save_path}")
-    
 
     def save(self, best=True):
         """
@@ -197,8 +192,7 @@ class RL(ABC):
         else:
             model = getattr(self, self.model_name)
             torch.save(model.state_dict(), save_path)
-        print(f"Model {self.alg_name}'s {self.model_name} has been saved at {save_path}, best {best}")
-
+        self.logger.info(f"Model {self.alg_name}'s {self.model_name} has been saved at {save_path}, best {best}")
 
     def _check_dir(self):
         """
@@ -210,17 +204,13 @@ class RL(ABC):
         return result_path
 
 
-
-@dataclass(kw_only=True)
-class VRLArgs(Args):
-    epsilon_start:float = 1.0
-    epsilon_end:float = 0.01
-    epsilon_decay:float = 0.002
-    epsilon_decay_flag:bool = True
-
 class VRL(RL):
     def __init__(self, env, args: VRLArgs = None, **kwargs):
         super().__init__(env=env, args=args, **kwargs)
+        self.epsilon_start:float = 1.0
+        self.epsilon_end:float = 0.01
+        self.epsilon_decay:float = 0.002
+        self.epsilon_decay_flag:bool = True
         self.noise = True if "Noisy" in self.alg_name else False
 
     def epsilon_greedy(self, state):
@@ -247,12 +237,6 @@ class VRL(RL):
             if super().report(epoch, epsilon=self.epsilon, **kwargs):
                 return True
 
-
-@dataclass(kw_only=True)
-class PRLArgs(Args):
-    is_gae:bool = False
-    lmbda:float = 0.95
-
 class PRL(RL):
     def __init__(self, env, args = None,**kwargs):
         super().__init__(env=env, args=args, **kwargs)
@@ -271,33 +255,7 @@ class PRL(RL):
         return torch.tensor(np.array(advantages_list), dtype=torch.float).to(self.device)
 
 
-class ReplayBuffer(object):
-    def __init__(self, capacity:int=10000) -> None:
-        self.capacity = capacity
-        self.buffer = deque(maxlen=self.capacity)
 
-    def add(self,transitions):
-        self.buffer.append(transitions)
-
-    def sample(self, batch_size:int, sequential:bool = False):
-        if batch_size > len(self.buffer):
-            batch_size = len(self.buffer)
-        if sequential:
-            rand = random.randint(0, len(self.buffer) - batch_size)
-            batch = [self.buffer[i] for i in range(rand, rand + batch_size)]
-            return zip(*batch)
-        else:
-            batch = random.sample(self.buffer, batch_size)
-            return zip(*batch)
-        
-    def sample_all(self):
-        return zip(*self.buffer)
-
-    def clear(self):
-        self.buffer.clear()
-
-    def __len__(self):
-        return len(self.buffer)
 
 
 # if __name__ == "__main__":

@@ -1,6 +1,5 @@
 from typing import Literal
-from module import VRL, ReplayBuffer, VRLArgs
-import os
+from module import VRL
 from net import Q_net, Dueling_Q_net
 from torch import optim
 import torch
@@ -8,6 +7,8 @@ import numpy as np
 from torch import nn
 import gymnasium as gym
 from argparse import ArgumentParser
+from args import VRLArgs
+from buffer import ReplayBuffer
 
 
 class DQN(VRL):
