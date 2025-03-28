@@ -4,15 +4,17 @@ import gymnasium as gym
 import torch
 import torch.optim as optim
 from torch.distributions import Categorical       
-from module import PRL, PRLArgs, ReplayBuffer
-from net import ActorCritic
+from core.module import PRL, PRLArgs
+from core.buffer import ReplayBuffer
+from core.args import PRLArgs
+from core.net import ActorCritic
 from torch import nn
 from torch.distributions import MultivariateNormal
 import numpy as np
 
 class PPO(PRL):
     def __init__(self, env, args: PRLArgs):
-        super().__init__(env=env, args=args)
+        super().__init__(env=env, args=args, alg_name="PPO", model_name="trg_policy",)
         self.buffer = ReplayBuffer()
         self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.lr)
@@ -37,31 +39,37 @@ class PPO(PRL):
             return action.item()
 
     def train(self):
-        for epoch in range(self.epochs):
-            cur_s = self.env.reset(seed=42)[0]
-            self.epoch_rewards = []
+        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
+            cur_s = self.env.reset()[0]
+            self.rewards = []
             while True:
                 a = self.act(cur_s)
                 next_s, reward, terminated, truncated, info = self.env.step(a)
-                self.epoch_rewards.append(reward)
-
                 if self.is_gae:
                     trainsition = (cur_s, next_s, a, reward, terminated or truncated)
                 else:
                     trainsition = (cur_s, None, a, reward, terminated or truncated)
                 self.buffer.add(trainsition)
 
-                self.sample_count += 1
-                if self.sample_count % self.update_freq == 0 and len(self.buffer) > 0:
+                cur_s = next_s
+                self.timestep += 1
+                self.rewards.append(reward)
+                
+                if self.timestep % self.update_freq == 0 and len(self.buffer) > 0:
                     self._update()
-                if terminated or truncated:
-                    break
-                else:
-                    cur_s = next_s
+                
+                if self.timestep_freq:
+                    early_stop = self.monitor.timestep_report()
 
-            self.rewards_record.append(sum(self.epoch_rewards))
+                if terminated or truncated:
+                    self.epoch_record.append(sum(self.rewards))
+                    break
             
-            if self.report(epoch):
+            if self.timestep_freq == None:
+                early_stop = self.monitor.epoch_report()
+                self.epoch += 1
+
+            if early_stop:
                 break
     
     def _update(self): 
@@ -119,7 +127,7 @@ class PPO(PRL):
             self.critic_optimizer.step()
             
         self.act_policy.load_state_dict(self.trg_policy.state_dict())
-        print(f"Target_policy has updated, actor_loss: {actor_loss.item()}, critic_loss: {critic_loss.item()}")
+        # print(f"Target_policy has updated, actor_loss: {actor_loss.item()}, critic_loss: {critic_loss.item()}")
         self.buffer.clear()
 
         return actor_loss.item(), critic_loss.item()
@@ -127,16 +135,16 @@ class PPO(PRL):
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")
     args = PRLArgs(
-        alg_name="PPO",
-        model_name="trg_policy",
-        epochs=1000,
+        max_epochs=1000,
         h_size=64,
         lr=3e-4,
         is_gae=False,
+        timestep_freq=100, 
+        max_timesteps=10000,
         custom_args={
-            "has_continuous_action_space": False,
-            "update_freq": 500,  # 至少要大于max_episode_steps
-            "update_times": 15,
+            "has_continuous_action_space": True,
+            "update_freq": 200,  # 至少要大于max_episode_steps
+            "update_times": 10,
             "eps_clip": 0.2,
         }
     )

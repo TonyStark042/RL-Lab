@@ -1,19 +1,19 @@
 from typing import Literal
-from module import VRL
-from net import Q_net, Dueling_Q_net
+from core.module import VRL
+from core.net import Q_net, Dueling_Q_net
 from torch import optim
 import torch
 import numpy as np
 from torch import nn
 import gymnasium as gym
 from argparse import ArgumentParser
-from args import VRLArgs
-from buffer import ReplayBuffer
+from core.args import VRLArgs
+from core.buffer import ReplayBuffer
 
 
 class DQN(VRL):
     def __init__(self, env, args:VRLArgs=None):
-        super().__init__(env, args=args)
+        super().__init__(env, args=args, model_name="policy_net",)
         if "Dueling" in self.alg_name:
             self.policy_net = Dueling_Q_net(self.state_num, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
             self.target_net = Dueling_Q_net(self.state_num, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
@@ -26,13 +26,12 @@ class DQN(VRL):
     
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
     def act(self, state, mode:Literal["train", "evaluate"]="train"):
-        self.sample_count += 1
         if mode == "evaluate":
             state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
             q_values = self.policy_net(state)
             action = q_values.argmax().item()
         else:
-            if self.noise == True:
+            if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
                 action = self.policy_net(state).argmax().item()
             else:
@@ -40,28 +39,47 @@ class DQN(VRL):
         return action
 
     def train(self):
-        for epoch in range(self.epochs):
+        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             rewards = []
-            s = self.env.reset(seed=42)[0]
+            s = self.env.reset()[0]
             while True:
                 a = self.act(s)
                 next_s, reward, terminated, truncated, info = self.env.step(a)
+                self.timestep += 1
                 rewards.append(reward)
                 self.memory.add((s, a, reward, next_s, terminated)) 
                 s = next_s
-                self._update()
-                if self.sample_count % self.sync_steps == 0:
-                    self.target_net.load_state_dict(self.policy_net.state_dict())                   
+                loss = self._update()
+                if self.timestep % self.sync_steps == 0:
+                    self.target_net.load_state_dict(self.policy_net.state_dict())
+
+                if self.timestep_freq:
+                    if self.noise:
+                        early_stop = self.monitor.timestep_report(loss=loss) 
+                    else:
+                        early_stop = self.monitor.timestep_report(loss=loss, epsilon=self.epsilon) 
+        
                 if terminated or truncated:
+                    self.epoch_record.append(sum(rewards))
                     break
-            self.rewards_record.append(sum(rewards))
+
+            if self.noise:
+                self.policy_net.reset_noise()
+                self.target_net.reset_noise()
+                if self.timestep_freq == None:
+                    early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
+                    self.epoch += 1
+            else:
+                if self.timestep_freq == None:
+                    early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
+                    self.epoch += 1
             
-            if self.report(epoch):
+            if early_stop:
                 break
 
     def _update(self):
         if len(self.memory) < self.batch_size:
-            return
+            return 0.0
         
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
@@ -110,20 +128,22 @@ if __name__ == "__main__":
     parser_args = parser.parse_args()
 
 
-    # alg_name="DQN",
-    # alg_name="DoubleDQN",
+    # alg_name="DQN"
+    # alg_name="DoubleDQN"
     # alg_name="DoubleDuelingDQN"
     # alg_name="NoisyDQN"
     alg_name = "DoubleDuelingNoisyDQN"
-    args = VRLArgs( epochs=1000,
-                    h_size=64, 
-                    alg_name=alg_name, 
-                    model_name="policy_net",
+    args = VRLArgs( max_epochs=1000,
+                    h_size=64,
+                    sync_steps=64, 
+                    batch_size=32, 
+                    memory_size=6000,
+                    report_freq=100,
+                    timestep_freq=100, 
+                    max_timesteps=10000, 
                     custom_args={
-                                "sync_steps":64, 
-                                "batch_size":32, 
-                                "memory_size":6000,
-                                "std_init":0.4,
+                                "alg_name":alg_name, 
+                                "std_init":0.3,
                                 })
     
     agent = DQN(env, args=args)

@@ -1,6 +1,6 @@
 from typing import Literal
-from net import ActorCritic
-from module import PRL, PRLArgs
+from core.net import ActorCritic
+from core.module import PRL, PRLArgs
 from torch import optim
 import torch
 import gymnasium as gym
@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 
 class A2C(PRL):
     def __init__(self, env, args:PRLArgs) -> None:
-        super().__init__(env, args=args)
+        super().__init__(env, args=args, alg_name="A2C", model_name="model")
         self.model = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
@@ -25,32 +25,43 @@ class A2C(PRL):
             return action.item()
         
     def train(self):
-        for epoch in range(self.epochs):
-            self.epoch_log_probs = []
-            self.epoch_rewards = []
+        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
+            self.log_probs = []
+            self.rewards = []
             self.epoch_values = []
             self.epoch_entropy = 0
             s = self.env.reset(seed=42)[0]
+
             while True:
                 a, v, dist = self.act(s)
                 s, reward, terminated, truncated, info = self.env.step(a)
-                self.epoch_log_probs.append(dist.log_prob(torch.tensor(a, device=self.device)))
-                self.epoch_rewards.append(reward)
+                self.timestep += 1
+                self.log_probs.append(dist.log_prob(torch.tensor(a, device=self.device)))
+                self.rewards.append(reward)
                 self.epoch_values.append(v)
                 self.epoch_entropy += dist.entropy().mean()
+
+                if self.timestep_freq:
+                    early_stop = self.monitor.timestep_report()
+
                 if terminated or truncated:
+                    self.epoch_record.append(sum(self.rewards))
                     break
-            self.rewards_record.append(sum(self.epoch_rewards))
-            loss, actor_loss, critic_loss = self._update()
-            if self.report(epoch, total_loss=loss, actor_loss=actor_loss, critic_loss=critic_loss):
+
+            self._update()
+
+            if self.timestep_freq == None:
+                early_stop = self.monitor.epoch_report()
+                self.epoch += 1
+            if early_stop:
                 break
 
     def _update(self):
         returns = []
-        for reward in self.epoch_rewards[::-1]:
+        for reward in self.rewards[::-1]:
             returns.insert(0, self.gamma * (0 if len(returns) ==0 else returns[0]) + reward)
         returns = torch.tensor(returns, device=self.device).detach()
-        log_probs = torch.cat(self.epoch_log_probs)
+        log_probs = torch.cat(self.log_probs)
         values = torch.cat(self.epoch_values)
         advantage = returns - values  # To train the critic, be closer to the collcted return, so that better estimate the action advantage. 
         critic_loss = advantage.pow(2).mean()
@@ -69,15 +80,14 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="A2C Settings")
     parser_args = parser.parse_args()
     alg_name = "A2C"
-    args = PRLArgs( epochs=1000,
+    args = PRLArgs( max_epochs=1000,
                     h_size=64, 
-                    alg_name=alg_name,
-                    model_name="model",
                     lr=0.001,
+                    timestep_freq=100, 
+                    max_timesteps=10000,
                     custom_args={
                                 "sync_steps":64, 
                                 "batch_size":32, 
-                                "memory_size":6000,
                                 "std_init":0.4,
                                 })
     
