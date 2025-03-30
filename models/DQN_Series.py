@@ -9,6 +9,7 @@ import gymnasium as gym
 from argparse import ArgumentParser
 from core.args import VRLArgs
 from core.buffer import ReplayBuffer
+import os
 
 
 class DQN(VRL):
@@ -26,16 +27,15 @@ class DQN(VRL):
     
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
     def act(self, state, mode:Literal["train", "evaluate"]="train"):
-        if mode == "evaluate":
-            state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
-            q_values = self.policy_net(state)
-            action = q_values.argmax().item()
-        else:
+        if mode == "train":
             if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
                 action = self.policy_net(state).argmax().item()
             else:
                 action = self.epsilon_greedy(state)
+        else:
+            state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+            action = self.policy_net(state).argmax().item()
         return action
 
     def train(self):
@@ -50,14 +50,16 @@ class DQN(VRL):
                 self.memory.add((s, a, reward, next_s, terminated)) 
                 s = next_s
                 loss = self._update()
-                if self.timestep % self.sync_steps == 0:
+                if self.timestep % self.sync_freq == 0:
                     self.target_net.load_state_dict(self.policy_net.state_dict())
 
-                if self.timestep_freq:
+                if self.train_mode == "timestep":
                     if self.noise:
                         early_stop = self.monitor.timestep_report(loss=loss) 
                     else:
                         early_stop = self.monitor.timestep_report(loss=loss, epsilon=self.epsilon) 
+                    if early_stop:
+                        break 
         
                 if terminated or truncated:
                     self.epoch_record.append(sum(rewards))
@@ -66,11 +68,11 @@ class DQN(VRL):
             if self.noise:
                 self.policy_net.reset_noise()
                 self.target_net.reset_noise()
-                if self.timestep_freq == None:
+                if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
                     self.epoch += 1
             else:
-                if self.timestep_freq == None:
+                if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
                     self.epoch += 1
             
@@ -104,51 +106,10 @@ class DQN(VRL):
 
         return loss.item()
     
-    def test(self, save_dir):
-        self.policy_net.load_state_dict(torch.load(save_dir))
-        rewards = []
-        s = self.env.reset(seed=42)[0]
-        while True:
-            a = self.act(s, mode="evaluate")
-            next_s, reward, terminated, truncated, info = self.env.step(a)
-            rewards.append(reward)
-            s = next_s                 
-            if terminated or truncated:
-                break
-        print(f"Test reward: {sum(rewards)}")
-        
-
-if __name__ == "__main__":
-    env = gym.make('CartPole-v1', render_mode="rgb_array", max_episode_steps=500)
-    parser = ArgumentParser(description="DQN Settings")
-    parser.add_argument("--alg_name", 
-                        type=str, 
-                        choices=["DQN", "Double", "Dueling", "DoubleDuelingDQN", "NoisyDQN"],
-                        default="DQN")
-    parser_args = parser.parse_args()
-
-
-    # alg_name="DQN"
-    # alg_name="DoubleDQN"
-    # alg_name="DoubleDuelingDQN"
-    # alg_name="NoisyDQN"
-    alg_name = "DoubleDuelingNoisyDQN"
-    args = VRLArgs( max_epochs=1000,
-                    h_size=64,
-                    sync_steps=64, 
-                    batch_size=32, 
-                    memory_size=6000,
-                    report_freq=100,
-                    timestep_freq=100, 
-                    max_timesteps=10000, 
-                    custom_args={
-                                "alg_name":alg_name, 
-                                "std_init":0.3,
-                                })
-    
-    agent = DQN(env, args=args)
-    agent.train()
-    # agent.learning_curve()
-    # agent.save()
-    save_dir = f"results/{alg_name}/{alg_name}_{env.spec.id}_h{agent.h_size}.pth"
-    agent.test(save_dir=save_dir)
+    def test(self):
+        result_dir = self.monitor._check_dir()
+        para = os.path.join(result_dir, f"weight.pth")
+        self.logger.info(f"Loading model from {para}")
+        self.policy_net.load_state_dict(torch.load(para))
+        rewards = self.evaluate()
+        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

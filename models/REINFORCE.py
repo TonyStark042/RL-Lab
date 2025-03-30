@@ -5,8 +5,9 @@ import torch
 import torch.optim as optim
 from torch.distributions import Categorical       
 from collections import deque
-from core.module import PRL, PRLArgs
+from core.module import PRL
 from core.net import Policy_net
+from core.args import PRLArgs
 
 
 class REINFORCE(PRL):
@@ -18,13 +19,12 @@ class REINFORCE(PRL):
     def act(self, state, mode:Literal["train", "evaluate"] = "train"):
         state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
         probs = self.policy_net(state).squeeze()
-        if mode == "evaluate":
-            action = probs.argmax()
-            return action.item()
-        else:
-            prob_dist = Categorical(probs)
-            action = prob_dist.sample()                                   
+        prob_dist = Categorical(probs)
+        action = prob_dist.sample()   
+        if mode == "train":  # evaluate ensures only return the action                            
             return action.item(), prob_dist.log_prob(action)
+        elif mode == "evaluate":
+            return action.item()
 
     def train(self):
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
@@ -39,8 +39,10 @@ class REINFORCE(PRL):
                 self.log_probs.append(log_prob) 
                 self.rewards.append(reward)
                 
-                if self.timestep_freq:
+                if self.train_mode == "timestep":
                     early_stop = self.monitor.timestep_report() 
+                    if early_stop:
+                        break 
 
                 if terminated or truncated:
                     self.epoch_record.append(sum(self.rewards))
@@ -48,7 +50,7 @@ class REINFORCE(PRL):
 
             self._update()
 
-            if self.timestep_freq == None:
+            if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
 
@@ -70,16 +72,10 @@ class REINFORCE(PRL):
         policy_reward.backward()
         self.optimizer.step()
 
-if __name__ == "__main__":
-    env = gym.make('CartPole-v1', render_mode="rgb_array")
-    args = PRLArgs(max_epochs=1000, 
-                   h_size=32, lr=0.001,
-                   # report_freq=10
-                   timestep_freq=100, 
-                   max_timesteps=100
-                   )
-
-    agent = REINFORCE(env, args)
-    agent.train()
-    agent.monitor.learning_curve(mode="timestep")
-    agent.save()
+    def test(self):
+        result_dir = self.monitor._check_dir()
+        para = os.path.join(result_dir, "weight.pth")
+        self.logger.info(f"Loading model from {para}")
+        self.policy_net.load_state_dict(torch.load(para))
+        rewards = self.evaluate()
+        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

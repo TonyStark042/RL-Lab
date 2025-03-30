@@ -1,18 +1,30 @@
-from core.args import VRLArgs
-from models.Q_Learning import Q_learning
-import gymnasium as gym
+from core.args import VRLArgs, PRLArgs
+from models import *
+from core.args import args
 
-env = gym.make("CliffWalking-v0", render_mode="rgb_array", max_episode_steps=300)
-# args = VRLArgs(alg_name="Q-Learning", max_epochs=800, epsilon_start=0.3, epsilon_decay_flag=True, lr=0.4)
-args = VRLArgs( 
-                # max_epochs=800, 
-                epsilon_start=0.3, 
-                epsilon_decay_flag=True, 
-                lr=0.4,
-                timestep_freq=100, 
-                max_timesteps=10000,
-                custom_args={"alg_name":"Sarsa"}
-                )
-agent = Q_learning(env, args)
-agent.train()
-agent.monitor.learning_curve(mode="timestep")
+def main():
+    if args.max_episode_steps is None:
+        env = gym.make(args.env_name, render_mode="rgb_array")
+    else:
+        env = gym.make(args.env_name, render_mode="rgb_array", max_episode_steps=args.max_episode_steps)
+
+    if args.alg_name in ["Q-Learning", "Sarsa"]:
+        agent = Q_learning(env, args=args)
+    elif args.alg_name == "PPO":
+        agent = PPO(env, args=args)
+    elif args.alg_name == "REINFORCE":
+        agent = REINFORCE(env, args=args)
+    elif args.alg_name == "A2C":
+        agent = A2C(env, args=args)
+    elif "DQN" in args.alg_name:
+        agent = DQN(env, args=args)
+
+    if args.mode == "train":
+        agent.train()
+        agent.save()
+        agent.monitor.learning_curve(mode=args.train_mode)
+    elif args.mode == "test":
+        agent.test()
+
+if __name__ == "__main__":
+    main()

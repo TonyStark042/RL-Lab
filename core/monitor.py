@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import os
 from typing import Literal
+from datetime import datetime
 
 class RLMonitor:
     def __init__(self, RLinstace):
@@ -85,14 +86,13 @@ class RLMonitor:
             plt.legend()
         plt.axhline(y=self.agent.optimal_reward, color='green', linestyle='--', label='Optimal Reward')
 
+        name = self.agent.train_mode
         if mode == "episode":
-            name = f"{self.agent.alg_name}_{self.agent.env.spec.id}_episode"
             X = range(len(self.agent.epoch_record))
             Y = self.agent.epoch_record
             plt.xlabel('Episodes')
             plt.ylabel('Rewards')
         elif mode == "timestep":
-            name = f"{self.agent.alg_name}_{self.agent.env.spec.id}_timestep"    
             X = self.agent.timestep_record['timesteps']
             Y = self.agent.timestep_record['rewards']
             plt.xlabel('timesteps')
@@ -108,16 +108,19 @@ class RLMonitor:
         
         save_path = os.path.join(result_path, f"{name}.png")
         plt.grid(True, alpha=0.3)
-        plt.title(self.agent.env.spec.id)
+        plt.title(self.agent.env_name)
         plt.legend()
-        plt.savefig(save_path, bbox_inches='tight', dpi=300)         
-        print(f"Learning curve has been saved to {save_path}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        self.agent.logger.info(f"Learning curve has been saved to {save_path}")   
     
     def _check_dir(self):
         """
         Check if there is the model's saving directory.
         """
-        result_path = os.path.join("results", self.agent.alg_name, self.agent.env.spec.id)
+        # now = datetime.now()
+        # time_str = now.strftime("%y%m%d%H%M")
+        # result_path = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}_{time_str}")
+        result_path = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}_{self.agent.train_mode}")
         if not os.path.exists(result_path):
             os.makedirs(result_path, exist_ok=True)
         return result_path
@@ -128,20 +131,22 @@ class RLMonitor:
         """
         if self.agent.reward_threshold is None or self.agent.reward_threshold == 0:
             self.agent.reward_threshold = np.inf if self.agent.env.spec.reward_threshold is None else self.agent.env.spec.reward_threshold
+            self._print_config()
+                    
         elif self.agent.reward_threshold < 0:
             raise ValueError("reward_threshold must be a non-negative number.")
         if self.agent.max_episode_steps is None:
-            self.logger.warning("max_episode_steps is not specified, please make sure the env must have an end.")
+            self.agent.logger.warning("max_episode_steps is not specified, please make sure the env must have an end.")
         if self.agent.model_name is None and self.agent.alg_name not in noDeepLearning:
             raise ValueError("Please specify the name of learnable policy net or Q net, which will be used in saving and updating best model")
         if self.agent.alg_name is None:
             raise ValueError("Please specify the name of the algorithm, which will be used in saving model and learning curve")
         if self.agent.max_epochs is np.inf and self.agent.max_timesteps is np.inf:
             if self.agent.early_stop:
-                self.logger.warning("max_epochs and max_timesteps is not specified, the training will continue until reward_threshold are met.")
+                self.agent.logger.warning("max_epochs and max_timesteps is not specified, the training will continue until reward_threshold are met.")
             else:
                 raise ValueError("Please specify the number of max_epochs for training, or set the early_stop to True.")
-        self._print_config()
+        
 
     def _print_config(self):
         """Print agent configuration in a formatted table"""
@@ -150,8 +155,8 @@ class RLMonitor:
         print(tplt.format("Arg","Value","Type"))
         
         for k, v in self.agent.__dict__.items():
-            if k == "env":
-                v = self.agent.env.spec.id
+            if k in ["env", "logger", "monitor", "custom_args"]:
+                continue
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         
         print(''.join(['=']*140))

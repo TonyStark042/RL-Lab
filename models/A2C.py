@@ -1,27 +1,27 @@
 from typing import Literal
 from core.net import ActorCritic
-from core.module import PRL, PRLArgs
+from core.module import PRL
+from core.args import PRLArgs
 from torch import optim
 import torch
 import gymnasium as gym
 from argparse import ArgumentParser
-
+import os
 
 class A2C(PRL):
     def __init__(self, env, args:PRLArgs) -> None:
         super().__init__(env, args=args, alg_name="A2C", model_name="model")
         self.model = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+        self.actor_optimizer = optim.Adam(self.model.actor.parameters(), lr=self.actor_lr)
+        self.critic_optimizer = optim.Adam(self.model.critic.parameters(), lr=self.critic_lr)
 
     def act(self, state, mode:Literal["train", "evaluate"]="train"):
         state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
+        dist, value = self.model(state)
+        action = dist.sample()
         if mode == "train":
-            dist, value = self.model(state)
-            action = dist.sample()
             return action.item(), value, dist
         else:
-            dist, value = self.model(state)
-            action = dist.probs.argmax()
             return action.item()
         
     def train(self):
@@ -41,8 +41,10 @@ class A2C(PRL):
                 self.epoch_values.append(v)
                 self.epoch_entropy += dist.entropy().mean()
 
-                if self.timestep_freq:
+                if self.train_mode == "timestep":
                     early_stop = self.monitor.timestep_report()
+                    if early_stop:
+                        break  
 
                 if terminated or truncated:
                     self.epoch_record.append(sum(self.rewards))
@@ -50,7 +52,7 @@ class A2C(PRL):
 
             self._update()
 
-            if self.timestep_freq == None:
+            if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
             if early_stop:
@@ -66,34 +68,20 @@ class A2C(PRL):
         advantage = returns - values  # To train the critic, be closer to the collcted return, so that better estimate the action advantage. 
         critic_loss = advantage.pow(2).mean()
         actor_loss  = -(log_probs * advantage.detach()).mean()
-        loss = actor_loss + 0.5 * critic_loss - 0.001 * self.epoch_entropy
+        loss = actor_loss + 0.5 * critic_loss - self.entropy_coef * self.epoch_entropy
 
-        self.optimizer.zero_grad()
+        self.actor_optimizer.zero_grad()
+        self.critic_optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        self.actor_optimizer.step()
+        self.critic_optimizer.step()
 
         return loss.item(), actor_loss.item(), critic_loss.item()
 
-
-if __name__ == "__main__":
-    env = gym.make('CartPole-v1', render_mode="rgb_array", max_episode_steps=500)
-    parser = ArgumentParser(description="A2C Settings")
-    parser_args = parser.parse_args()
-    alg_name = "A2C"
-    args = PRLArgs( max_epochs=1000,
-                    h_size=64, 
-                    lr=0.001,
-                    timestep_freq=100, 
-                    max_timesteps=10000,
-                    custom_args={
-                                "sync_steps":64, 
-                                "batch_size":32, 
-                                "std_init":0.4,
-                                })
-    
-    agent = A2C(env, args=args)
-    agent.train()
-    agent.learning_curve()
-    agent.save()
-    # save_dir = f"results/{alg_name}/{alg_name}_{env.spec.id}_h{agent.h_size}.pth"
-    # agent.test(save_dir=save_dir)
+    def test(self):
+        result_dir = self.monitor._check_dir()
+        para = os.path.join(result_dir, f"weight.pth")
+        self.logger.info(f"Loading model from {para}")
+        self.model.load_state_dict(torch.load(para))
+        rewards = self.evaluate()
+        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

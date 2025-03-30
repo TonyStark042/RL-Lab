@@ -2,7 +2,6 @@ import os
 from typing import Literal
 import gymnasium as gym
 import torch
-import torch.optim as optim
 from torch.distributions import Categorical       
 from core.module import PRL, PRLArgs
 from core.buffer import ReplayBuffer
@@ -17,26 +16,21 @@ class PPO(PRL):
         super().__init__(env=env, args=args, alg_name="PPO", model_name="trg_policy",)
         self.buffer = ReplayBuffer()
         self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
-        self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.lr)
-        self.critic_optimizer =  torch.optim.Adam(self.trg_policy.critic.parameters(), self.lr)
+        self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
+        self.critic_optimizer =  torch.optim.Adam(self.trg_policy.critic.parameters(), self.critic_lr)
 
         self.act_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
-        self.act_policy.load_state_dict(self.trg_policy.state_dict()) 
+        self.act_policy.load_state_dict(self.trg_policy.state_dict())
                                                                     
         self.criterion = nn.MSELoss()
 
     @torch.no_grad()
     def act(self, state, mode: Literal["train", "evaluate"] = "train"): 
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-        if mode == "train":
-            probs = self.act_policy.actor(state)
-            dist = Categorical(probs)
-            action = dist.sample()
-            return action.item()
-        else:
-            dist, _ = self.trg_policy(state)
-            action = dist.probs.argmax()
-            return action.item()
+        probs = self.act_policy.actor(state)
+        dist = Categorical(probs)
+        action = dist.sample()
+        return action.item()
 
     def train(self):
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
@@ -58,14 +52,16 @@ class PPO(PRL):
                 if self.timestep % self.update_freq == 0 and len(self.buffer) > 0:
                     self._update()
                 
-                if self.timestep_freq:
+                if self.train_mode == "timestep":
                     early_stop = self.monitor.timestep_report()
+                    if early_stop:
+                        break  # exit inner loop first
 
                 if terminated or truncated:
                     self.epoch_record.append(sum(self.rewards))
                     break
             
-            if self.timestep_freq == None:
+            if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
 
@@ -112,7 +108,7 @@ class PPO(PRL):
 
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
-            actor_loss = -torch.min(surr1, surr2).mean() + 0.01 * dist_entropy.mean()
+            actor_loss = -torch.min(surr1, surr2).mean() + self.entropy_coef * dist_entropy.mean()
             if self.is_gae:
                 critic_loss = self.criterion(state_values, td_target.detach()).mean()
             else:
@@ -132,24 +128,11 @@ class PPO(PRL):
 
         return actor_loss.item(), critic_loss.item()
     
-if __name__ == "__main__":
-    env = gym.make("CartPole-v1")
-    args = PRLArgs(
-        max_epochs=1000,
-        h_size=64,
-        lr=3e-4,
-        is_gae=False,
-        timestep_freq=100, 
-        max_timesteps=10000,
-        custom_args={
-            "has_continuous_action_space": True,
-            "update_freq": 200,  # 至少要大于max_episode_steps
-            "update_times": 10,
-            "eps_clip": 0.2,
-        }
-    )
-    agent = PPO(env, args)
-    agent.train()
-    # agent.learning_curve()
-    # agent.save()    
+    def test(self):
+        result_dir = self.monitor._check_dir()
+        para = os.path.join(result_dir, f"weight.pth")
+        self.logger.info(f"Loading model from {para}")
+        self.act_policy.load_state_dict(torch.load(para))
+        rewards = self.evaluate()
+        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")
     

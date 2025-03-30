@@ -1,33 +1,28 @@
 import gymnasium as gym
 import numpy as np
 import os
-from matplotlib import pyplot as plt
 import torch
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 from core.args import *
-from core import noDeepLearning
 from core.monitor import RLMonitor
+from core import noDeepLearning
 import copy
+import logging
+import yaml
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 class RL(ABC):
     def __init__(self, 
                  env, 
                  args,
                  **kwargs,
-                 ):  # env_related, user_input, fixed_args
-        ## env related attributes ##
-        self.env = env
-        self.eval_env = copy.deepcopy(env)
-        self.action_space = self.env.action_space
-        self.action_num =  sum(self.env.action_space.shape) if type(env.action_space) == gym.spaces.box.Box else self.env.action_space.n
-        self.state_space = self.env.observation_space
-        self.state_num = sum(self.env.observation_space.shape) if type(env.observation_space) == gym.spaces.box.Box else self.env.observation_space.n
-        self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                 ): 
         ## hyperparameters, loading from arguments ##
+        self.env = env
+        self.env_name = env.spec.id
+        self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make
         self.max_epochs:int = np.inf
         self.max_timesteps:int = np.inf
         self.reward_threshold:float = None
@@ -43,16 +38,31 @@ class RL(ABC):
         self.report_freq :int = None
         self.window_size:int = 10
         ## loading asigned arguments from args ##
-        default_args = asdict(Args()) if args is None else asdict(args)
-        if args and hasattr(args, 'custom_args'):
-            default_args.update(args.custom_args)
+        default_args = asdict(args)
+        default_args.pop("max_episode_steps")
         default_args.update(kwargs)
         for k, v in default_args.items():
             setattr(self, k, v)
+
         ## logger ##
         self.logger = logging.getLogger(name=self.alg_name)
         self.monitor = RLMonitor(self)
         self.monitor._check_args()
+        # record above arguments, must be after checking, the reward_threshold will be reset
+        self.args = self.__dict__.copy()  
+        self.args.pop("monitor")
+        self.args.pop("logger")
+        self.args.pop("model_name")
+        self.args.pop("env")
+        self.args.pop("mode")
+
+        ## env related attributes ##
+        self.eval_env = copy.deepcopy(env)
+        self.action_space = self.env.action_space
+        self.action_num =  sum(self.env.action_space.shape) if type(env.action_space) == gym.spaces.box.Box else self.env.action_space.n
+        self.state_space = self.env.observation_space
+        self.state_num = sum(self.env.observation_space.shape) if type(env.observation_space) == gym.spaces.box.Box else self.env.observation_space.n
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ## recoding arguments, variable ## 
         self.timestep = 0
         self.epoch = 0
@@ -103,26 +113,35 @@ class RL(ABC):
             model_name (str): The name of the model attribute to save. Defaults to 'policy_net';
             best (str): Whether to save the history best model, or will save the last episode's model if set to False
         """
-        result_path = self.monitor._check_dir()
-        save_path = os.path.join(result_path, f"{self.alg_name}_{self.env.spec.id}_h{self.h_size}.pth")
-        
-        assert hasattr(self, self.model_name), "Model '{self.model_name}' not found. Please ensure the model exists before saving."
+        result_path = self.monitor._check_dir()        
 
-        if best:
-            torch.save(self.best.state_dict(), save_path)
+        running_para = self.args
+        if self.alg_name in noDeepLearning:
+            running_para.pop("lr")
+            running_para.pop("h_size")
+        elif self.alg_name in ["PPO", "A2C"]:
+            running_para.pop("lr")
+
+        with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:
+            yaml.dump(running_para, f)
+
+        if self.alg_name not in noDeepLearning:
+            save_path = os.path.join(result_path, f"weight.pth")
+            if best:
+                torch.save(self.best.state_dict(), save_path)
+            else:
+                model = getattr(self, self.model_name)
+                torch.save(model.state_dict(), save_path)
+            self.logger.info(f"Model {self.alg_name}'s {self.model_name} has been saved at {save_path}, best {best}")
         else:
-            model = getattr(self, self.model_name)
-            torch.save(model.state_dict(), save_path)
-        self.logger.info(f"Model {self.alg_name}'s {self.model_name} has been saved at {save_path}, best {best}")
+            save_path = os.path.join(result_path, f"Q_table.npy")
+            np.save(save_path, self.Q)
+
 
 
 class VRL(RL):
-    def __init__(self, env, args: VRLArgs = None, **kwargs):
+    def __init__(self, env, args= None, **kwargs):
         super().__init__(env=env, args=args, **kwargs)
-        self.epsilon_start:float = 1.0
-        self.epsilon_end:float = 0.01
-        self.epsilon_decay:float = 0.002
-        self.epsilon_decay_flag:bool = True
         self.noise = True if "Noisy" in self.alg_name else False
 
     def epsilon_greedy(self, state):
