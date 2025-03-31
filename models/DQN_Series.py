@@ -1,3 +1,4 @@
+import time
 from typing import Literal
 from core.module import VRL
 from core.net import Q_net, Dueling_Q_net
@@ -39,6 +40,7 @@ class DQN(VRL):
         return action
 
     def train(self):
+        start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             rewards = []
             s = self.env.reset()[0]
@@ -78,6 +80,8 @@ class DQN(VRL):
             
             if early_stop:
                 break
+        end = time.time()
+        self.training_time += (end - start).total_seconds()
 
     def _update(self):
         if len(self.memory) < self.batch_size:

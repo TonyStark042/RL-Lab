@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Literal
 import gymnasium as gym
 import torch
@@ -12,7 +13,7 @@ from core.args import PRLArgs
 
 class REINFORCE(PRL):
     def __init__(self, env, args):       
-        super().__init__(env=env, args=args, alg_name="REINFORCE", model_name="policy_net")
+        super().__init__(env=env, args=args, model_name="policy_net")
         self.policy_net = Policy_net(self.state_num, self.action_num, self.h_size).to(self.device)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
     
@@ -27,6 +28,7 @@ class REINFORCE(PRL):
             return action.item()
 
     def train(self):
+        start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             self.log_probs = []
             self.rewards = []
@@ -56,6 +58,8 @@ class REINFORCE(PRL):
 
             if early_stop:
                 break
+        end = time.time()
+        self.training_time += (end - start).total_seconds()
 
     def _update(self):
         policy_reward = torch.tensor(0.0).to(self.device)

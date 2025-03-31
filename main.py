@@ -1,6 +1,7 @@
 from core.args import VRLArgs, PRLArgs
 from models import *
 from core.args import args
+from utils import new_agent
 
 def main():
     if args.max_episode_steps is None:
@@ -8,16 +9,7 @@ def main():
     else:
         env = gym.make(args.env_name, render_mode="rgb_array", max_episode_steps=args.max_episode_steps)
 
-    if args.alg_name in ["Q-Learning", "Sarsa"]:
-        agent = Q_learning(env, args=args)
-    elif args.alg_name == "PPO":
-        agent = PPO(env, args=args)
-    elif args.alg_name == "REINFORCE":
-        agent = REINFORCE(env, args=args)
-    elif args.alg_name == "A2C":
-        agent = A2C(env, args=args)
-    elif "DQN" in args.alg_name:
-        agent = DQN(env, args=args)
+    agent = new_agent(env, args=args)
 
     if args.mode == "train":
         agent.train()

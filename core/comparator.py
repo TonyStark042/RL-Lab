@@ -1,0 +1,164 @@
+import gymnasium as gym
+from models import *
+from core.args import *
+import logging
+import multiprocessing as mp
+import os
+import numpy as np
+from matplotlib import pyplot as plt
+from datetime import datetime
+import tempfile
+import pickle
+import shutil
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+def _train_wrapper(agent_file):
+    """
+    Wrapper function to train an agent in a separate process.
+    
+    Args:
+        agent_file: Path to the pickled agent file
+    """
+    with open(agent_file, 'rb') as f:
+        agent = pickle.load(f)
+    agent.train()
+    with open(agent_file, 'wb') as f:
+        agent = pickle.dump(agent, f)
+
+
+class Comparator:
+    """
+    A class for comparing different RL algorithms on the same environment.
+    """
+    def __init__(self, **kwargs):
+        """
+        Initialize the comparator.
+        """
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+        self.agents = {}
+        self.logger = logging.getLogger("Comparator")
+    
+    def add_algorithm(self, *tuples):
+        """
+        Add an algorithm to compare.
+        """
+        for name, agent in tuples:
+            self.agents[name] = agent
+    
+    def train_all(self, parallel=True, n_processes=None):
+        """
+        Train all added algorithms, optionally in parallel.
+        
+        Args:
+            parallel (bool): Whether to train algorithms in parallel
+            n_processes (int, optional): Number of parallel processes to use.
+                                        If None, uses all available CPU cores.
+        """
+        self.results_dir = os.path.join("results", "comparisons", "_".join(self.agents.keys()), self.env_name)
+        if not parallel:
+            for name, agent in self.agents.items():
+                self.logger.info(f"Start training {name}...")
+                
+                start_time = datetime.now()
+                agent.train()
+                end_time = datetime.now()
+                
+                self.training_times[name] = (end_time - start_time).total_seconds()
+                
+                self.logger.info(f"Finished training {name} in {self.training_times[name]:.2f} seconds, final reward: {agent.optimal_reward:.2f}")
+                print("-" * 140)
+            return
+        else:
+            temp_dir = tempfile.mkdtemp()
+
+            if n_processes is None:
+                n_processes = min(mp.cpu_count(), len(self.agents))
+            self.logger.info(f"Starting parallel training with {n_processes} processes")
+            processes = []
+            
+            for name, agent in self.agents.items():
+                self.logger.info(f"Preparing {name} for parallel training...")
+                agent_file = os.path.join(temp_dir, f"{name}_agent.pkl")
+                with open(agent_file, 'wb') as f:
+                    pickle.dump(agent, f)
+                p = mp.Process(target=_train_wrapper, args=(agent_file,))
+                processes.append((name, p))
+                p.start()
+                self.logger.info(f"Started training process for {name}, process ID: {p.pid}")
+            
+            for name, p in processes:
+                p.join()
+                with open(os.path.join(temp_dir, f"{name}_agent.pkl"), 'rb') as f:
+                    trained_agent = pickle.load(f)
+                    self.agents[name] = trained_agent
+                self.logger.info(f"Training process for {name} completed, time consumed: {self.agents[name].training_time:.2f} seconds)")
+                print("-" * 140)
+            
+            self.logger.info("Parallel training completed for all algorithms")
+    
+    def evaluate_all(self, num_episodes=10):
+        """
+        Evaluate all trained algorithms.
+        
+        Args:
+            num_episodes (int): Number of episodes to evaluate each algorithm
+            
+        Returns:
+            dict: Dictionary mapping algorithm names to average rewards
+        """
+        results = {}
+        
+        for name, agent in self.agents.items():
+            agent.eval_episodes = num_episodes
+            avg_reward = agent.evaluate()
+            results[name] = avg_reward
+            
+        return results
+    
+    def learning_curve(self, save=True):
+        """
+        Plot learning curves for all algorithms.
+        
+        Args:
+            save (bool): Whether to save the plot
+        """
+        plt.figure(figsize=(10, 6))
+        for name, agent in self.agents.items():
+            if self.train_mode == "timestep":
+                X = agent.timestep_record['timesteps']
+                Y = agent.timestep_record['rewards']
+            elif self.train_mode == "episode":
+                X = range(1, len(agent.epoch_record+1))
+                Y = np.array(agent.epoch_record)
+
+            if self.window_size > 1:
+                smoothed_rewards = []
+                for i in range(len(Y)):
+                    start = max(0, i - self.window_size)
+                    smoothed_rewards.append(np.mean(Y[start:i+1]))
+                Y = smoothed_rewards
+            
+            plt.plot(X, Y, label=name)
+        
+        plt.xlabel('Timesteps')
+        plt.ylabel('Reward')
+        plt.title(f'Learning Curves on {self.env_name}')
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        
+        
+        if not os.path.exists(self.results_dir):
+            os.makedirs(self.results_dir, exist_ok=True)
+        if save:
+            plt.savefig(os.path.join(self.results_dir, f"{agent.train_mode}.png") , bbox_inches='tight', dpi=300)
+            self.logger.info(f"Comparison Learning curve has been saved to {self.results_dir}")
+    
+    def save_all(self):
+        """
+        Save all trained algorithms.
+        """
+        with open(os.path.join(self.results_dir, 'comparator.pkl'), 'wb') as f:
+            pickle.dump(self, f)
+        shutil.copyfile("compare.yaml", os.path.join(self.results_dir, 'compare.yaml'))
+        self.logger.info(f"Compatator object and arguments has been saved to {self.results_dir}")

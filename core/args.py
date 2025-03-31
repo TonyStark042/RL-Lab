@@ -8,12 +8,12 @@ import yaml
 parser = argparse.ArgumentParser(description='RL algorithm parameters')
 
 # Required arguments
-parser.add_argument('--env', type=str, default=None, help='Environment name', required=True)
-parser.add_argument('--alg_name', type=str, default=None, help=f"Algorithm name, support {allModels}, DQN_Series support any combination of {DQN_Series}+DQN", required=True)
-parser.add_argument('--mode', type=str, default="train", choices=["train", "test"], help="If test, will automatically use the parameter in results/ to run.")
-parser.add_argument('--train_mode', type=str, default="timestep", choices=["episode", "timestep"])
+parser.add_argument('--env', type=str, default='', help='Environment name')
+parser.add_argument('--alg_name', type=str, default='', help=f"Algorithm name, support {allModels}, DQN_Series support any combination of {DQN_Series}+DQN")
 
 # Common arguments for all classes
+parser.add_argument('--mode', type=str, default="train", choices=["train", "test"], help="If test, will automatically use the parameter in results/ to run.")
+parser.add_argument('--train_mode', type=str, default="timestep", choices=["episode", "timestep"])
 parser.add_argument('--max_epochs', type=float, default=np.inf, help='Maximum number of epochs')
 parser.add_argument('--max_timesteps', type=float, default=np.inf, help='Maximum number of timesteps')
 parser.add_argument('--reward_threshold', type=float, default=None, help='Reward threshold for early stopping')
@@ -122,11 +122,11 @@ if args.mode == "train":
             args = DQNArgs()
     elif args.alg_name in ["Q-Learning", "Sarsa"]:
         args = VRLArgs()
-    elif args.alg_name == "REINFORCE":
+    elif "REINFORCE" in args.alg_name:
         args = REINFORCEArgs()
-    elif args.alg_name == "A2C":
+    elif "A2C" in args.alg_name:
         args = A2CArgs()
-    elif args.alg_name == "PPO":
+    elif "PPO" in args.alg_name:
         args = PPOArgs()
     else:
         args = Args()
@@ -139,11 +139,11 @@ else:
             args = DQNArgs(**training_hyperparameters)
     elif args.alg_name in ["Q-Learning", "Sarsa"]:
         args = VRLArgs(**training_hyperparameters)
-    elif args.alg_name == "REINFORCE":
+    elif "REINFORCE" in args.alg_name:
         args = REINFORCEArgs(**training_hyperparameters)
-    elif args.alg_name == "A2C":
+    elif "A2C" in args.alg_name:
         args = A2CArgs(**training_hyperparameters)
-    elif args.alg_name == "PPO":
+    elif "PPO" in args.alg_name:
         args = PPOArgs(**training_hyperparameters)
     else:
         args = Args(**training_hyperparameters)

@@ -70,6 +70,7 @@ class RL(ABC):
         self.best = None
         self.epoch_record = []
         self.timestep_record = {"timesteps": [], "rewards": []}
+        self.training_time = 0
 
     @abstractmethod
     def act(self, state, mode="train"):
@@ -119,7 +120,7 @@ class RL(ABC):
         if self.alg_name in noDeepLearning:
             running_para.pop("lr")
             running_para.pop("h_size")
-        elif self.alg_name in ["PPO", "A2C"]:
+        elif "PPO" in self.alg_name or "A2C" in self.alg_name:
             running_para.pop("lr")
 
         with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:

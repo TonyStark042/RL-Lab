@@ -72,7 +72,6 @@ class RLMonitor:
         else:
             return False
         
-
     def learning_curve(self, mode=Literal["episode", "timestep"]):
         """
         Plot and save the learning curve with optional moving average and visualization.
@@ -83,7 +82,6 @@ class RLMonitor:
         plt.figure(figsize=(10, 6))
         if hasattr(self.agent, 'reward_threshold') and self.agent.reward_threshold not in (None, np.inf):
             plt.axhline(y=self.agent.reward_threshold, color='r', linestyle='--', label='Reward Threshold')
-            plt.legend()
         plt.axhline(y=self.agent.optimal_reward, color='green', linestyle='--', label='Optimal Reward')
 
         name = self.agent.train_mode
@@ -145,8 +143,7 @@ class RLMonitor:
             if self.agent.early_stop:
                 self.agent.logger.warning("max_epochs and max_timesteps is not specified, the training will continue until reward_threshold are met.")
             else:
-                raise ValueError("Please specify the number of max_epochs for training, or set the early_stop to True.")
-        
+                raise ValueError("Please specify the number of max_epochs for training, or set the early_stop to True.") 
 
     def _print_config(self):
         """Print agent configuration in a formatted table"""
@@ -160,7 +157,3 @@ class RLMonitor:
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         
         print(''.join(['=']*140))
-
-    def save_results(self):
-        pass
-        # 实现结果保存

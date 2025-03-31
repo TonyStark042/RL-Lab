@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Literal
 import gymnasium as gym
 import torch
@@ -13,7 +14,7 @@ import numpy as np
 
 class PPO(PRL):
     def __init__(self, env, args: PRLArgs):
-        super().__init__(env=env, args=args, alg_name="PPO", model_name="trg_policy",)
+        super().__init__(env=env, args=args, model_name="trg_policy",)
         self.buffer = ReplayBuffer()
         self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
@@ -33,6 +34,7 @@ class PPO(PRL):
         return action.item()
 
     def train(self):
+        start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             cur_s = self.env.reset()[0]
             self.rewards = []
@@ -67,6 +69,8 @@ class PPO(PRL):
 
             if early_stop:
                 break
+        end = time.time()
+        self.training_time += (end - start).total_seconds()
     
     def _update(self): 
         old_states, old_next_states, old_actions, rewards, is_terminals = self.buffer.sample_all()

@@ -1,3 +1,4 @@
+import time
 import gymnasium as gym
 from typing import Literal, Optional
 import numpy as np
@@ -18,6 +19,7 @@ class Q_learning(VRL):
         return a
 
     def train(self):
+        start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             cur_s, _ = self.env.reset()
             epoch_reward = 0
@@ -60,6 +62,8 @@ class Q_learning(VRL):
 
             if early_stop:
                 break 
+        end = time.time()
+        self.training_time += (end - start).total_seconds()
 
     def _update(self, s, a, next_s, next_a:Optional[None], r):  
         if next_a == None:

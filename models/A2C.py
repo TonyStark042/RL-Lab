@@ -1,3 +1,4 @@
+import time
 from typing import Literal
 from core.net import ActorCritic
 from core.module import PRL
@@ -10,7 +11,7 @@ import os
 
 class A2C(PRL):
     def __init__(self, env, args:PRLArgs) -> None:
-        super().__init__(env, args=args, alg_name="A2C", model_name="model")
+        super().__init__(env, args=args, model_name="model")
         self.model = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
         self.actor_optimizer = optim.Adam(self.model.actor.parameters(), lr=self.actor_lr)
         self.critic_optimizer = optim.Adam(self.model.critic.parameters(), lr=self.critic_lr)
@@ -25,6 +26,7 @@ class A2C(PRL):
             return action.item()
         
     def train(self):
+        start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             self.log_probs = []
             self.rewards = []
@@ -57,6 +59,8 @@ class A2C(PRL):
                 self.epoch += 1
             if early_stop:
                 break
+        end = time.time()
+        self.training_time += (end - start).total_seconds()
 
     def _update(self):
         returns = []
