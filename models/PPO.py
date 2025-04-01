@@ -14,7 +14,7 @@ import numpy as np
 
 class PPO(PRL):
     def __init__(self, env, args: PRLArgs):
-        super().__init__(env=env, args=args, model_name="trg_policy",)
+        super().__init__(env=env, args=args, model_name="act_policy",)
         self.buffer = ReplayBuffer()
         self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
@@ -56,7 +56,8 @@ class PPO(PRL):
                 
                 if self.train_mode == "timestep":
                     early_stop = self.monitor.timestep_report()
-                    if early_stop:
+                    reach_maxTimestep = self.timestep >= self.max_timesteps
+                    if early_stop or reach_maxTimestep:
                         break  # exit inner loop first
 
                 if terminated or truncated:
@@ -67,10 +68,10 @@ class PPO(PRL):
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
 
-            if early_stop:
+            if early_stop or reach_maxTimestep:
                 break
         end = time.time()
-        self.training_time += (end - start).total_seconds()
+        self.training_time += (end - start)
     
     def _update(self): 
         old_states, old_next_states, old_actions, rewards, is_terminals = self.buffer.sample_all()
@@ -131,12 +132,4 @@ class PPO(PRL):
         self.buffer.clear()
 
         return actor_loss.item(), critic_loss.item()
-    
-    def test(self):
-        result_dir = self.monitor._check_dir()
-        para = os.path.join(result_dir, f"weight.pth")
-        self.logger.info(f"Loading model from {para}")
-        self.act_policy.load_state_dict(torch.load(para))
-        rewards = self.evaluate()
-        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")
     

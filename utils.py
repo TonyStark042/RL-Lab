@@ -6,6 +6,7 @@ def new_agent(**kwargs):
     """
     Create a new agent instance.
     """
+    global args
     if kwargs != {} and "alg_name" in kwargs:
         alg_name = kwargs.get("alg_name", None)
         if alg_name in ["Q-Learning", "Sarsa"]:

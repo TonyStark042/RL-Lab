@@ -2,7 +2,7 @@ import gymnasium as gym
 from models import *
 from core.args import *
 import logging
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import os
 import numpy as np
 from matplotlib import pyplot as plt
@@ -64,7 +64,7 @@ class Comparator:
                 agent.train()
                 end_time = datetime.now()
                 
-                self.training_times[name] = (end_time - start_time).total_seconds()
+                self.training_times[name] = (end_time - start_time)
                 
                 self.logger.info(f"Finished training {name} in {self.training_times[name]:.2f} seconds, final reward: {agent.optimal_reward:.2f}")
                 print("-" * 140)
@@ -92,7 +92,7 @@ class Comparator:
                 with open(os.path.join(temp_dir, f"{name}_agent.pkl"), 'rb') as f:
                     trained_agent = pickle.load(f)
                     self.agents[name] = trained_agent
-                self.logger.info(f"Training process for {name} completed, time consumed: {self.agents[name].training_time:.2f} seconds)")
+                self.logger.info(f"Training process for {name} completed, time consumed {self.agents[name].training_time:.2f}s")
                 print("-" * 140)
             
             self.logger.info("Parallel training completed for all algorithms")
@@ -124,29 +124,41 @@ class Comparator:
             save (bool): Whether to save the plot
         """
         plt.figure(figsize=(10, 6))
-        for name, agent in self.agents.items():
-            if self.train_mode == "timestep":
-                X = agent.timestep_record['timesteps']
-                Y = agent.timestep_record['rewards']
-            elif self.train_mode == "episode":
-                X = range(1, len(agent.epoch_record+1))
-                Y = np.array(agent.epoch_record)
+        colors = plt.cm.tab10.colors
 
-            if self.window_size > 1:
-                smoothed_rewards = []
-                for i in range(len(Y)):
-                    start = max(0, i - self.window_size)
-                    smoothed_rewards.append(np.mean(Y[start:i+1]))
-                Y = smoothed_rewards
-            
-            plt.plot(X, Y, label=name)
+        if self.train_mode == "episode":
+            plt.xlabel('Episodes')
+        elif self.train_mode == "timestep":
+            plt.xlabel('timesteps')
+
+        for index, (name, agent) in enumerate(self.agents.items()):
+            X = agent.timestep_record['timesteps']
+            Y_arrays = np.array(agent.timestep_record['rewards'])
+            color = colors[index]
+
+            moving_avg = []
+            moving_std = []
+            for index, reward_array in enumerate(Y_arrays):
+                if index < self.window_size:
+                    moving_avg.append(reward_array.sum())
+                    moving_std.append(reward_array.std())
+                else:
+                    sliding_window = Y_arrays[index - self.window_size + 1:index + 1]
+                    sliding_window = sliding_window.mean(axis=1)
+                    sliding_avg = sliding_window.mean()
+                    sliding_std = sliding_window.std()
+                    moving_avg.append(sliding_avg)
+                    moving_std.append(sliding_std)
+            moving_avg = np.array(moving_avg)
+            moving_std = np.array(moving_std)
+
+            plt.plot(X, moving_avg, color=color, label=name)
+            plt.fill_between(X, moving_avg - moving_std, moving_avg + moving_std, color=color, alpha=0.2)
         
-        plt.xlabel('Timesteps')
-        plt.ylabel('Reward')
-        plt.title(f'Learning Curves on {self.env_name}')
+        plt.ylabel('Rewards')
+        plt.title(f'Comparison on {self.env_name}')
         plt.grid(True, alpha=0.3)
         plt.legend()
-        
         
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir, exist_ok=True)

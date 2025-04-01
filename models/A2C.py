@@ -6,8 +6,8 @@ from core.args import PRLArgs
 from torch import optim
 import torch
 import gymnasium as gym
-from argparse import ArgumentParser
 import os
+import numpy as np
 
 class A2C(PRL):
     def __init__(self, env, args:PRLArgs) -> None:
@@ -32,7 +32,7 @@ class A2C(PRL):
             self.rewards = []
             self.epoch_values = []
             self.epoch_entropy = 0
-            s = self.env.reset(seed=42)[0]
+            s = self.env.reset()[0]
 
             while True:
                 a, v, dist = self.act(s)
@@ -45,8 +45,9 @@ class A2C(PRL):
 
                 if self.train_mode == "timestep":
                     early_stop = self.monitor.timestep_report()
-                    if early_stop:
-                        break  
+                    reach_maxTimestep = self.timestep >= self.max_timesteps
+                    if early_stop or reach_maxTimestep:
+                        break
 
                 if terminated or truncated:
                     self.epoch_record.append(sum(self.rewards))
@@ -57,10 +58,10 @@ class A2C(PRL):
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
-            if early_stop:
+            if early_stop or reach_maxTimestep:
                 break
         end = time.time()
-        self.training_time += (end - start).total_seconds()
+        self.training_time += (end - start)
 
     def _update(self):
         returns = []
@@ -81,11 +82,3 @@ class A2C(PRL):
         self.critic_optimizer.step()
 
         return loss.item(), actor_loss.item(), critic_loss.item()
-
-    def test(self):
-        result_dir = self.monitor._check_dir()
-        para = os.path.join(result_dir, f"weight.pth")
-        self.logger.info(f"Loading model from {para}")
-        self.model.load_state_dict(torch.load(para))
-        rewards = self.evaluate()
-        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

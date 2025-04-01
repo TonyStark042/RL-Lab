@@ -59,8 +59,9 @@ class DQN(VRL):
                     if self.noise:
                         early_stop = self.monitor.timestep_report(loss=loss) 
                     else:
-                        early_stop = self.monitor.timestep_report(loss=loss, epsilon=self.epsilon) 
-                    if early_stop:
+                        early_stop = self.monitor.timestep_report(loss=loss, epsilon=self.epsilon)
+                    reach_maxTimestep = self.timestep >= self.max_timesteps
+                    if early_stop or reach_maxTimestep:
                         break 
         
                 if terminated or truncated:
@@ -78,10 +79,10 @@ class DQN(VRL):
                     early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
                     self.epoch += 1
             
-            if early_stop:
+            if early_stop or reach_maxTimestep:
                 break
         end = time.time()
-        self.training_time += (end - start).total_seconds()
+        self.training_time += (end - start)
 
     def _update(self):
         if len(self.memory) < self.batch_size:
@@ -109,11 +110,3 @@ class DQN(VRL):
         self.optimizer.step()
 
         return loss.item()
-    
-    def test(self):
-        result_dir = self.monitor._check_dir()
-        para = os.path.join(result_dir, f"weight.pth")
-        self.logger.info(f"Loading model from {para}")
-        self.policy_net.load_state_dict(torch.load(para))
-        rewards = self.evaluate()
-        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

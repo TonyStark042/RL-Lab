@@ -32,8 +32,11 @@ class Q_learning(VRL):
                     self._update(cur_s, a, next_s, None, reward) # target sugg, using the best Q of s' to update
                     cur_s = next_s
                     if self.train_mode == "timestep":
-                        early_stop = self.monitor.timestep_report() 
-
+                        early_stop = self.monitor.timestep_report()
+                        reach_maxTimestep = self.timestep >= self.max_timesteps
+                        if early_stop or reach_maxTimestep:
+                            break
+                        
                     if terminated or truncated:
                         self.epoch_record.append(epoch_reward)
                         break
@@ -50,8 +53,9 @@ class Q_learning(VRL):
 
                     if self.train_mode == "timestep":
                         early_stop = self.monitor.timestep_report()
-                        if early_stop:
-                            break  
+                        reach_maxTimestep = self.timestep >= self.max_timesteps
+                        if early_stop or reach_maxTimestep:
+                            break
 
                     if terminated or truncated:
                         self.epoch_record.append(epoch_reward)
@@ -60,10 +64,10 @@ class Q_learning(VRL):
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
 
-            if early_stop:
+            if early_stop or reach_maxTimestep:
                 break 
         end = time.time()
-        self.training_time += (end - start).total_seconds()
+        self.training_time += (end - start)
 
     def _update(self, s, a, next_s, next_a:Optional[None], r):  
         if next_a == None:
@@ -71,9 +75,3 @@ class Q_learning(VRL):
         else:
             Q_target = r + self.gamma * self.Q[next_s][next_a]                
         self.Q[s][a] = self.Q[s][a] + self.lr * (Q_target - self.Q[s][a])
-
-    def test(self):
-        Q_table = np.load(f"results/{self.alg_name}/{self.env_name}_{self.train_mode}/Q_table.npy", allow_pickle=True)
-        self.Q = Q_table
-        rewards = self.evaluate()
-        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

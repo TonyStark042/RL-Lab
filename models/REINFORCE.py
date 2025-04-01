@@ -42,9 +42,10 @@ class REINFORCE(PRL):
                 self.rewards.append(reward)
                 
                 if self.train_mode == "timestep":
-                    early_stop = self.monitor.timestep_report() 
-                    if early_stop:
-                        break 
+                    early_stop = self.monitor.timestep_report()
+                    reach_maxTimestep = self.timestep >= self.max_timesteps
+                    if early_stop or reach_maxTimestep:
+                        break
 
                 if terminated or truncated:
                     self.epoch_record.append(sum(self.rewards))
@@ -56,10 +57,10 @@ class REINFORCE(PRL):
                 early_stop = self.monitor.epoch_report()
                 self.epoch += 1
 
-            if early_stop:
+            if early_stop or reach_maxTimestep:
                 break
         end = time.time()
-        self.training_time += (end - start).total_seconds()
+        self.training_time += (end - start)
 
     def _update(self):
         policy_reward = torch.tensor(0.0).to(self.device)
@@ -75,11 +76,3 @@ class REINFORCE(PRL):
         self.optimizer.zero_grad()
         policy_reward.backward()
         self.optimizer.step()
-
-    def test(self):
-        result_dir = self.monitor._check_dir()
-        para = os.path.join(result_dir, "weight.pth")
-        self.logger.info(f"Loading model from {para}")
-        self.policy_net.load_state_dict(torch.load(para))
-        rewards = self.evaluate()
-        self.logger.info(f"{self.alg_name} test reward in {self.env_name}: {rewards}")

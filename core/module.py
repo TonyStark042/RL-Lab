@@ -37,6 +37,7 @@ class RL(ABC):
         self.timestep_freq:int = None 
         self.report_freq :int = None
         self.window_size:int = 10
+        self.eval_epochs:int = 10
         ## loading asigned arguments from args ##
         default_args = asdict(args)
         default_args.pop("max_episode_steps")
@@ -93,20 +94,51 @@ class RL(ABC):
 
         self.timestep_record['rewards'].append(rewards)
 
+    def single_evaluate(self):
+        s = self.eval_env.reset()[0]
+        epoch_reward = 0
+        while True:
+            a = self.act(s, mode="evaluate")
+            s, reward, terminated, truncated, info = self.eval_env.step(a)
+            epoch_reward += reward
+            if terminated or truncated:
+                break
+        return epoch_reward
+    
     def evaluate(self):
         """
         Evaluate the model's performence by choosing the most likly or most valuable action.
         """
-        s = self.eval_env.reset()[0]
-        rewards = 0
-        while True:
-            a = self.act(s, mode="evaluate")
-            s, reward, terminated, truncated, info = self.eval_env.step(a)
-            rewards += reward
-            if terminated or truncated:
-                break
+        results = []
+        # processes = min(mp.cpu_count(), self.eval_epochs)
+        # with mp.Pool(processes=processes) as pool:
+        # with ThreadPoolExecutor(processes) as pool: 
+        #     results = list(pool.map(self.single_evaluate, range(self.eval_epochs)))
+            # pool.close()
+            # pool.join()
+        for _ in range(self.eval_epochs):
+            results.append(self.single_evaluate())
+        rewards = np.array(results)
         return rewards
     
+    def test(self):
+        """
+        Test the model's performence.
+        """
+        result_dir = self.monitor._check_dir()
+        
+        if self.alg_name in noDeepLearning:
+            para = os.path.join(result_dir, "Q_table.npy")
+            self.Q = np.load(para, allow_pickle=True)
+        else:
+            para = os.path.join(result_dir, "weight.pth")
+            model = getattr(self, self.model_name)
+            model.load_state_dict(torch.load(para))
+        self.logger.info(f"Loading model from {para}")
+
+        rewards = self.evaluate()
+        self.logger.info(f"{self.alg_name} in {self.env_name}, Average {self.eval_epochs} reward {np.mean(rewards):.3f}, Standard deviation {np.std(rewards):.3f}")
+
     def save(self, best=True):
         """
         Save the specified model's state dict.
@@ -122,6 +154,8 @@ class RL(ABC):
             running_para.pop("h_size")
         elif "PPO" in self.alg_name or "A2C" in self.alg_name:
             running_para.pop("lr")
+        elif "Noisy" not in self.alg_name and "DQN" in self.alg_name:
+            running_para.pop("std_init")
 
         with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)
@@ -137,6 +171,7 @@ class RL(ABC):
         else:
             save_path = os.path.join(result_path, f"Q_table.npy")
             np.save(save_path, self.Q)
+
 
 
 

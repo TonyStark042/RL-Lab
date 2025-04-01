@@ -11,32 +11,36 @@ class RLMonitor:
         
     def epoch_report(self, **kwargs) -> bool:
         """
-        evalute the model reward situation around rencent <window_size> episode, and save the best model, checking early stop
+        evalute the model reward situation around rencent <window_size> episode, differs from timestep_report, epoch_report's average_n_reward uses training data instead of evalating data
         Args:
             epoch: The current episode;
         """
         if len(self.agent.epoch_record) <= self.agent.window_size:
-            avg_n_reward = sum(self.agent.epoch_record) / len(self.agent.epoch_record)
+            avg_n_reward = np.mean(sum(self.agent.epoch_record) / len(self.agent.epoch_record))
         else:
-            avg_n_reward = sum(self.agent.epoch_record[-self.agent.window_size:])/self.agent.window_size
+            avg_n_reward = np.mean(sum(self.agent.epoch_record[-self.agent.window_size:]) / self.agent.window_size)
 
-        optimal_reward = self.agent.evaluate()
-
-        if optimal_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
-            self.agent.optimal_reward = optimal_reward
+        evaluate_reward = self.agent.evaluate()
+        self.agent.timestep_record["rewards"].append(evaluate_reward)
+        self.agent.timestep_record["timesteps"].append(self.agent.epoch)
+        mean_evaluate_reward = np.mean(evaluate_reward)
+        
+        if mean_evaluate_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
+            self.agent.optimal_reward = mean_evaluate_reward
             state_dict = getattr(self.agent, self.agent.model_name)
             self.agent.best = state_dict
 
         if self.agent.epoch % self.agent.report_freq == 0:
-            message = f"Episode: {self.agent.epoch} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Optimal reward: {optimal_reward} | History optimal: {self.agent.optimal_reward} "
+            message = f"Episode: {self.agent.epoch} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward} | History optimal: {self.agent.optimal_reward} "
             for k,v in kwargs.items():
                 message += f"| {k}: {v:.3f} "
             self.agent.logger.info(message)
     
         if self.agent.early_stop:
-            if avg_n_reward >= self.agent.reward_threshold and optimal_reward >= self.agent.reward_threshold:
-                self.agent.logger.info(f"Converged at epoch: {self.agent.epoch}, final optimal reward: {optimal_reward}")
+            if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
+                self.agent.logger.info(f"Converged at epoch: {self.agent.epoch}, final optimal reward: {mean_evaluate_reward}")
                 return True
+                
         return False
     
     def timestep_report(self, **kwargs) -> bool:
@@ -44,29 +48,30 @@ class RLMonitor:
         evalute the model reward situation every self.agent.timestep_freq in rencent <window_size> timestep, and save the best model, checking early stop
         """
 
-        if self.agent.timestep_freq != None and self.agent.timestep % self.agent.timestep_freq == 0:
-            optimal_reward = self.agent.evaluate()
-            self.agent.timestep_record["rewards"].append(optimal_reward)
+        if self.agent.train_mode == "timestep" and self.agent.timestep % self.agent.timestep_freq == 0:
+            evaluate_reward = self.agent.evaluate()
+            mean_evaluate_reward = np.mean(evaluate_reward)
+            self.agent.timestep_record["rewards"].append(evaluate_reward)
             self.agent.timestep_record["timesteps"].append(self.agent.timestep)
             if len(self.agent.timestep_record["rewards"]) <= self.agent.window_size:
-                avg_n_reward = sum(self.agent.timestep_record["rewards"]) / len(self.agent.timestep_record["rewards"])
+                avg_n_reward = np.mean(sum(self.agent.timestep_record["rewards"]) / len(self.agent.timestep_record["rewards"]))
             else:
-                avg_n_reward = sum(self.agent.timestep_record["rewards"][-self.agent.window_size:])/self.agent.window_size
+                avg_n_reward = np.mean(sum(self.agent.timestep_record["rewards"][-self.agent.window_size:]) / self.agent.window_size)
         
-            if optimal_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
-                self.agent.optimal_reward = optimal_reward
+            if mean_evaluate_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
+                self.agent.optimal_reward = mean_evaluate_reward
                 state_dict = getattr(self.agent, self.agent.model_name)
                 self.agent.best = state_dict
 
             if self.agent.timestep % self.agent.report_freq == 0:
-                message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Optimal reward: {optimal_reward} | History optimal: {self.agent.optimal_reward} "
+                message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward} | History optimal: {self.agent.optimal_reward} "
                 for k,v in kwargs.items():
                     message += f"| {k}: {v:.3f}"
                 self.agent.logger.info(message)
         
             if self.agent.early_stop:
-                if avg_n_reward >= self.agent.reward_threshold and optimal_reward >= self.agent.reward_threshold:
-                    self.agent.logger.info(f"Converged at timestep: {self.agent.timestep}, final optimal reward: {optimal_reward}")
+                if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
+                    self.agent.logger.info(f"Converged at timestep: {self.agent.timestep}, final optimal reward: {mean_evaluate_reward}")
                     return True
             return False
         else:
@@ -74,9 +79,7 @@ class RLMonitor:
         
     def learning_curve(self, mode=Literal["episode", "timestep"]):
         """
-        Plot and save the learning curve with optional moving average and visualization.
-        Args:
-            window_size (int): Size of the moving average window. Default is 10.
+        Plot and save the learning curve with optional moving average and visualization, showing the evaluation reward, instead of training reward, the std looks low beacause uses moving average std.
         """
         result_path = self._check_dir()
         plt.figure(figsize=(10, 6))
@@ -86,23 +89,36 @@ class RLMonitor:
 
         name = self.agent.train_mode
         if mode == "episode":
-            X = range(len(self.agent.epoch_record))
-            Y = self.agent.epoch_record
             plt.xlabel('Episodes')
             plt.ylabel('Rewards')
         elif mode == "timestep":
-            X = self.agent.timestep_record['timesteps']
-            Y = self.agent.timestep_record['rewards']
             plt.xlabel('timesteps')
             plt.ylabel('Rewards')
+        X = self.agent.timestep_record['timesteps']
+        Y_arrays = np.array(self.agent.timestep_record['rewards'])
+        Y_mean = np.array([np.mean(y) for y in Y_arrays])
+        # Y_std = np.array([np.std(y) for y in Y_arrays])
+        # plt.fill_between(X, Y_mean - Y_std, Y_mean + Y_std, color='gray', alpha=0.2)
 
-        plt.plot(X, Y, alpha=0.3, color='gray', label='Raw Rewards')
-        if len(Y) >= self.agent.window_size:
-            moving_avg = np.convolve(Y, 
-                                    np.ones(self.agent.window_size)/self.agent.window_size, 
-                                    mode='valid') # only start calculating when epoch >= 10
-            plt.plot(X[self.agent.window_size-1:], moving_avg, 
-                    color='blue', label=f'Moving Average (n={self.agent.window_size})')
+        plt.plot(X, Y_mean, alpha=0.3, color='gray', label='Raw Rewards')
+        moving_avg = []
+        moving_std = []
+        for index, reward_array in enumerate(Y_arrays):
+            if index < self.agent.window_size:
+                moving_avg.append(reward_array.sum())
+                moving_std.append(reward_array.std())
+            else:
+                sliding_window = Y_arrays[index - self.agent.window_size + 1:index + 1]
+                sliding_window = sliding_window.mean(axis=1)
+                sliding_avg = sliding_window.mean()
+                sliding_std = sliding_window.std()
+                moving_avg.append(sliding_avg)
+                moving_std.append(sliding_std)
+        moving_avg = np.array(moving_avg)
+        moving_std = np.array(moving_std)
+
+        plt.plot(X, moving_avg, color='blue', label=f'Moving Average (n={self.agent.window_size})')
+        plt.fill_between(X, moving_avg - moving_std, moving_avg + moving_std, color='blue', alpha=0.2)
         
         save_path = os.path.join(result_path, f"{name}.png")
         plt.grid(True, alpha=0.3)
@@ -115,9 +131,6 @@ class RLMonitor:
         """
         Check if there is the model's saving directory.
         """
-        # now = datetime.now()
-        # time_str = now.strftime("%y%m%d%H%M")
-        # result_path = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}_{time_str}")
         result_path = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}_{self.agent.train_mode}")
         if not os.path.exists(result_path):
             os.makedirs(result_path, exist_ok=True)
@@ -140,10 +153,10 @@ class RLMonitor:
         if self.agent.alg_name is None:
             raise ValueError("Please specify the name of the algorithm, which will be used in saving model and learning curve")
         if self.agent.max_epochs is np.inf and self.agent.max_timesteps is np.inf:
-            if self.agent.early_stop:
+            if self.agent.early_stop and self.agent.reward_threshold != np.inf:
                 self.agent.logger.warning("max_epochs and max_timesteps is not specified, the training will continue until reward_threshold are met.")
             else:
-                raise ValueError("Please specify the number of max_epochs for training, or set the early_stop to True.") 
+                raise ValueError("Please specify the number of max_epochs or max_timesteps for training, or set the early_stop to True and set the reward_threshold.") 
 
     def _print_config(self):
         """Print agent configuration in a formatted table"""

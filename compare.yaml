@@ -1,7 +1,7 @@
 common_args:
   env_name: CartPole-v1
   train_mode: timestep
-  max_timesteps: 20000
+  max_timesteps: 50000
   timestep_freq: 100
   report_freq: 100
   window_size: 10
@@ -10,25 +10,25 @@ common_args:
   early_stop: false
 PPO:
   baseline: 0
-  actor_lr: 0.05
-  critic_lr: 0.005
-  entropy_coef: 0.001
+  actor_lr: 0.0005
+  critic_lr: 0.0002
+  entropy_coef: 0.0001
+  h_size: 64
   eps_clip: 0.2
   gamma: 0.99
-  h_size: 32
   is_gae: true
   lmbda: 0.95
-  update_freq: 50
+  update_freq: 100
   update_times: 5
 REINFORCE:
   baseline: 0
-  gamma: 0.99
   h_size: 32
-  lr: 0.005
+  gamma: 0.99
+  lr: 0.0003
 A2C:
   baseline: 0
+  h_size: 64
   gamma: 0.99
-  h_size: 32
   lmbda: 0.95
-  actor_lr: 0.05
-  critic_lr: 0.005
+  actor_lr: 0.0005
+  critic_lr: 0.0002

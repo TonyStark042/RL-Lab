@@ -8,7 +8,7 @@ import yaml
 parser = argparse.ArgumentParser(description='RL algorithm parameters')
 
 # Required arguments
-parser.add_argument('--env', type=str, default='', help='Environment name')
+parser.add_argument('--env_name', type=str, default='', help='Environment name')
 parser.add_argument('--alg_name', type=str, default='', help=f"Algorithm name, support {allModels}, DQN_Series support any combination of {DQN_Series}+DQN")
 
 # Common arguments for all classes
@@ -26,6 +26,7 @@ parser.add_argument('--window_size', type=int, default=10, help='Window size for
 parser.add_argument('--timestep_freq', type=int, default=100, help='Every N timesteps, evaluate the model and then record')
 parser.add_argument('--report_freq', type=int, default=100, help='Reporting frequency')
 parser.add_argument('--max_episode_steps', type=int, default=None, help='Maximum episode steps')
+parser.add_argument('--eval_epochs', type=int, default=10, help='Maximum episode steps')
 
 # VRL-specific arguments
 parser.add_argument('--epsilon_start', type=float, default=1.0, help='Starting epsilon value')
@@ -55,7 +56,7 @@ args = parser.parse_args()
 
 @dataclass(kw_only=True, frozen=False)
 class Args:
-    env_name:str = args.env
+    env_name:str = args.env_name
     mode:str = args.mode
     train_mode:str = args.train_mode
     max_epochs:float = args.max_epochs
@@ -71,6 +72,8 @@ class Args:
     report_freq:int = args.report_freq
     alg_name:str = args.alg_name
     max_episode_steps:int = args.max_episode_steps
+    eval_epochs:int = args.eval_epochs
+
     def __post_init__(self):
         pass
 
@@ -131,7 +134,7 @@ if args.mode == "train":
     else:
         args = Args()
 else:
-    training_hyperparameters = yaml.safe_load(open(f"results/{args.alg_name}/{args.env}_{args.train_mode}/recipe.yaml", "r"))
+    training_hyperparameters = yaml.safe_load(open(f"results/{args.alg_name}/{args.env_name}_{args.train_mode}/recipe.yaml", "r"))
     if "DQN" in args.alg_name:
         if "Noisy" in args.alg_name:
             args = NoisyDQNArgs(**training_hyperparameters)

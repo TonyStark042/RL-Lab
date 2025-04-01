@@ -12,12 +12,12 @@ h_size: 64
 is_gae: true
 lmbda: 0.95
 max_episode_steps: 500
-max_epochs: .inf
-max_timesteps: 100000.0
+max_epochs: 1000.0
+max_timesteps: .inf
 report_freq: 100
 reward_threshold: 475.0
 timestep_freq: 100
-train_mode: timestep
+train_mode: episode
 update_freq: 100
-update_times: 5
+update_times: 10
 window_size: 10
