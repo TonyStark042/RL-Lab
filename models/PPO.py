@@ -16,11 +16,11 @@ class PPO(PRL):
     def __init__(self, env, args: PRLArgs):
         super().__init__(env=env, args=args, model_name="act_policy",)
         self.buffer = ReplayBuffer()
-        self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
+        self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
         self.critic_optimizer =  torch.optim.Adam(self.trg_policy.critic.parameters(), self.critic_lr)
 
-        self.act_policy = ActorCritic(self.state_num, self.action_num, self.h_size).to(self.device)
+        self.act_policy = ActorCritic(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
         self.act_policy.load_state_dict(self.trg_policy.state_dict())
                                                                     
         self.criterion = nn.MSELoss()
@@ -28,10 +28,10 @@ class PPO(PRL):
     @torch.no_grad()
     def act(self, state, mode: Literal["train", "evaluate"] = "train"): 
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-        probs = self.act_policy.actor(state)
-        dist = Categorical(probs)
+        dist = self.act_policy.actor(state)
         action = dist.sample()
-        return action.item()
+        action = self.adapt_action(action)
+        return action.cpu().numpy()
 
     def train(self):
         start = time.time()
@@ -76,9 +76,9 @@ class PPO(PRL):
     def _update(self): 
         old_states, old_next_states, old_actions, rewards, is_terminals = self.buffer.sample_all()
         old_states = torch.tensor(np.array(old_states), device=self.device, dtype=torch.float) # Creating a tensor a list of numpy.ndarrays is extremely slow, eg: [np.array, np.array, np.array]
-        old_actions = torch.tensor(old_actions, device=self.device).unsqueeze(-1)
+        old_actions = torch.tensor(np.array(old_actions), device=self.device)
 
-        old_log_probs = torch.log(self.act_policy.actor(old_states).gather(1, old_actions)).detach()
+        old_log_probs = self.act_policy.actor(old_states).log_prob(old_actions).detach()
         old_state_values = self.act_policy.critic(old_states)
         
         if self.is_gae:
@@ -102,14 +102,16 @@ class PPO(PRL):
             returns = torch.tensor(returns, dtype=torch.float, device=self.device).unsqueeze(-1)  # 蒙特卡洛估计的Advantage，高方差
             # returns = (returns - returns.mean()) / (returns.std() + 1e-5)
             advantages = returns - old_state_values.detach()
+        advantages = (advantages - advantages.mean()) / ((advantages.std()+1e-4))
 
         for _ in range(self.update_times):            
-            dist = Categorical(self.trg_policy.actor(old_states))
-            log_probs = dist.log_prob(old_actions.squeeze()).unsqueeze(-1)
+            dist = self.trg_policy.actor(old_states)
+            log_probs = dist.log_prob(old_actions.squeeze())
             dist_entropy = dist.entropy().mean()
             state_values = self.trg_policy.critic(old_states)
 
-            ratios = torch.exp(log_probs - old_log_probs)
+            # ratios = torch.exp(log_probs - old_log_probs)
+            ratios = torch.exp(log_probs.sum(1, keepdim=True) - old_log_probs.sum(1, keepdim=True))
 
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
@@ -123,7 +125,7 @@ class PPO(PRL):
             self.critic_optimizer.zero_grad()
             actor_loss.backward()
             critic_loss.backward()
-            # torch.nn.utils.clip_grad_norm_(self.trg_policy.parameters(), 5) # imporrtant, avoid gradient explosion
+            torch.nn.utils.clip_grad_norm_(self.trg_policy.actor.parameters(), 30) # imporrtant! avoid gradient explosion
             self.actor_optimizer.step()
             self.critic_optimizer.step()
             

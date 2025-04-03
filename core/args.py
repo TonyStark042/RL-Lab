@@ -17,7 +17,7 @@ parser.add_argument('--train_mode', type=str, default="timestep", choices=["epis
 parser.add_argument('--max_epochs', type=float, default=np.inf, help='Maximum number of epochs')
 parser.add_argument('--max_timesteps', type=float, default=np.inf, help='Maximum number of timesteps')
 parser.add_argument('--reward_threshold', type=float, default=None, help='Reward threshold for early stopping')
-parser.add_argument('--early_stop', type=bool, default=True, help='Enable early stopping when average_reward and optimal_reward both exceed threshold')
+parser.add_argument('--early_stop', action='store_true', help='Enable early stopping when average_reward and optimal_reward both exceed threshold')
 parser.add_argument('--baseline', type=float, default=0, help='Baseline value, east method for getting advantage')
 parser.add_argument('--gamma', type=float, default=0.99, help='Discount factor')
 parser.add_argument('--lr', type=float, default=1e-4, help='Optimizer learning rate')

@@ -20,10 +20,11 @@ class A2C(PRL):
         state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
         dist, value = self.model(state)
         action = dist.sample()
+        action = self.adapt_action(action)
         if mode == "train":
-            return action.item(), value, dist
+            return action.cpu().numpy(), value, dist
         else:
-            return action.item()
+            return action.cpu().numpy()
         
     def train(self):
         start = time.time()

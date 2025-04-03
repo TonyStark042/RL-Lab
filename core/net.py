@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from torch.distributions import Categorical
+from torch.distributions import Categorical, MultivariateNormal, Normal
 
 
 class Q_net(nn.Module):
@@ -111,16 +111,29 @@ class NoisyLinear(nn.Module):
         return x
 
 class Policy_net(nn.Module):
-    def __init__(self, state_num, action_num, h_size):
+    def __init__(self, state_num, action_num, h_size, has_continuous_action_space=False):
         super().__init__()
+        self.has_continuous_action_space = has_continuous_action_space
         self.fc1 = nn.Linear(state_num, h_size)
         self.fc2 = nn.Linear(h_size, h_size*2)
-        self.fc3 = nn.Linear(h_size*2, action_num)
+        if has_continuous_action_space:
+            self.mu = nn.Linear(h_size*2, action_num)
+            self.sigma = nn.Linear(h_size*2, action_num)
+        else:
+            self.fc3 = nn.Linear(h_size*2, action_num)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return F.softmax(self.fc3(x), dim=1)   # The input of torch is a batch (2d), so the output is 2d (batch_size, action_num)，that's why softmax on the dim1.
+        if self.has_continuous_action_space:
+            mu = F.sigmoid(self.mu(x)).squeeze()   # mu全部等于1了？
+            sigma = F.softplus(self.sigma(x)).squeeze()
+            dist = Normal(mu, sigma) 
+            # dist = MultivariateNormal(mu, sigma)
+        else:
+            probs = F.softmax(self.fc3(x), dim=1)
+            dist = Categorical(probs) # support probs dim is greater than 1
+        return dist
 
 class Critic_net(nn.Module):
     def __init__(self, state_num, h_size):
@@ -135,13 +148,13 @@ class Critic_net(nn.Module):
         return self.fc3(x)
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_num, action_num, h_size):
+    def __init__(self, state_num, action_num, h_size, has_continuous_action_space):
         super(ActorCritic, self).__init__()
+        self.has_continuous_action_space = has_continuous_action_space
         self.critic = Critic_net(state_num, h_size)
-        self.actor = Policy_net(state_num, action_num, h_size)
+        self.actor = Policy_net(state_num, action_num, h_size, has_continuous_action_space)
 
     def forward(self, x):
         value = self.critic(x)
-        probs = self.actor(x)
-        dist  = Categorical(probs)
+        dist = self.actor(x)
         return dist, value

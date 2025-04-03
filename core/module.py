@@ -31,6 +31,7 @@ class RL(ABC):
         self.gamma:float = 0.99
         self.lr:float = 1e-4
         self.h_size:int = 32
+        self.has_continuous_action_space: bool = True if env.action_space.dtype in [np.float32, np.float64] else False
         ## epoch_report related ##
         self.alg_name:str = kwargs.get("alg_name", None)
         self.model_name:str = kwargs.get("model_name", None)
@@ -60,9 +61,9 @@ class RL(ABC):
         ## env related attributes ##
         self.eval_env = copy.deepcopy(env)
         self.action_space = self.env.action_space
-        self.action_num =  sum(self.env.action_space.shape) if type(env.action_space) == gym.spaces.box.Box else self.env.action_space.n
+        self.action_num =  sum(self.env.action_space.shape) if env.action_space.dtype in (np.float32, np.float64) else self.env.action_space.n
         self.state_space = self.env.observation_space
-        self.state_num = sum(self.env.observation_space.shape) if type(env.observation_space) == gym.spaces.box.Box else self.env.observation_space.n
+        self.state_num = sum(self.env.observation_space.shape) if env.observation_space.dtype in (np.float32, np.float64) else self.env.observation_space.n
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ## recoding arguments, variable ## 
         self.timestep = 0
@@ -198,6 +199,9 @@ class VRL(RL):
 class PRL(RL):
     def __init__(self, env, args = None,**kwargs):
         super().__init__(env=env, args=args, **kwargs)
+        if self.has_continuous_action_space:
+            assert all(abs(self.action_space.low) == abs(self.action_space.high)), "Continuous action space must be symmetric"
+        self.max_action = self.env.action_space.high[0] if hasattr(self.env.action_space, "high") else 1
     
     def gae(self, td_delta):
         td_delta = td_delta.detach().numpy()
@@ -209,6 +213,13 @@ class PRL(RL):
         advantages_list.reverse()
         return torch.tensor(np.array(advantages_list), dtype=torch.float).to(self.device)
 
+    def adapt_action(self, a):
+        if self.has_continuous_action_space:
+            a = torch.clamp(a, 0, 1)
+            return 2*(a-0.5)*self.max_action # limitation: maximum action expansion is consistent across all dimensions, e.g. (-2,2)
+        else:
+            return a
+          
 
 # if __name__ == "__main__":
 #     env = gym.make('CartPole-v1', render_mode="rgb_array")
