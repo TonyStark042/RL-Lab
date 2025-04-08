@@ -14,18 +14,20 @@ from core.args import PRLArgs
 class REINFORCE(PRL):
     def __init__(self, env, args):       
         super().__init__(env=env, args=args, model_name="policy_net")
-        self.policy_net = Policy_net(self.state_num, self.action_num, self.h_size).to(self.device)
+        self.policy_net = Policy_net(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
     
-    def act(self, state, mode:Literal["train", "evaluate"] = "train"):
+    def act(self, state, mode:Literal["train", "evaluate", "test"] = "train"):
         state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
-        probs = self.policy_net(state).squeeze()
-        prob_dist = Categorical(probs)
-        action = prob_dist.sample()   
+        dist = self.policy_net(state)
+        action = dist.sample()   
         if mode == "train":  # evaluate ensures only return the action                            
-            return action.item(), prob_dist.log_prob(action)
+            return action.detach().cpu().numpy() , dist.log_prob(action)
         elif mode == "evaluate":
-            return action.item()
+            return action.detach().cpu().numpy()
+        else:
+            action = dist.probs.argmax(dim=-1)
+            return action.detach().cpu().numpy()
 
     def train(self):
         start = time.time()
@@ -36,7 +38,7 @@ class REINFORCE(PRL):
 
             while True:
                 a, log_prob = self.act(s)
-                s, reward, terminated, truncated, info = self.env.step(a)
+                s, reward, terminated, truncated, info = self.env.step(a.squeeze())
                 self.timestep += 1
                 self.log_probs.append(log_prob) 
                 self.rewards.append(reward)
@@ -52,11 +54,11 @@ class REINFORCE(PRL):
                     break
 
             self._update()
+            self.epoch += 1
 
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
-                self.epoch += 1
-
+                
             if early_stop or reach_maxTimestep:
                 break
         end = time.time()
@@ -64,14 +66,16 @@ class REINFORCE(PRL):
 
     def _update(self):
         policy_reward = torch.tensor(0.0).to(self.device)
-        steps = len(self.rewards)
-        returns = deque()   
 
-        for t in range(steps)[::-1]:
-            disc_return_t = (returns[0] if len(returns)>0 else 0)   
-            returns.appendleft(self.gamma*disc_return_t + self.rewards[t])  # Dynamic Programming
+        returns = []
+        next_return = 0.0  
+        for reward in self.rewards[::-1]:
+            cur_return = reward + self.gamma * next_return
+            next_return = cur_return
+            returns.append(cur_return)
+        returns.reverse()
         for log_prob, disc_return in zip(self.log_probs, returns):
-            policy_reward += (-log_prob * (disc_return - self.baseline)).sum()       # log_prob * disc_return，but the default gradient descent direction is "-"，Adding "-" means gradient rise.
+            policy_reward += (-log_prob.sum(-1) * (disc_return - self.baseline)).sum()       # log_prob * disc_return，but the default gradient descent direction is "-"，Adding "-" means gradient rise.
                                        
         self.optimizer.zero_grad()
         policy_reward.backward()

@@ -11,10 +11,10 @@ class Q_learning(VRL):
         super().__init__(env, args=args)
         self.Q = np.zeros((self.state_num, self.action_num))
     
-    def act(self, state, mode:Literal["train", "evaluate"]="train"):
+    def act(self, state, mode:Literal["train", "evaluate", "test"]="train"):
         if mode == "train":
             a = self.epsilon_greedy(state)
-        elif mode == "evaluate":
+        else:
             a = np.argmax(self.Q[state])
         return a
 
@@ -60,9 +60,10 @@ class Q_learning(VRL):
                     if terminated or truncated:
                         self.epoch_record.append(epoch_reward)
                         break
+                    
+            self.epoch += 1
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
-                self.epoch += 1
 
             if early_stop or reach_maxTimestep:
                 break 

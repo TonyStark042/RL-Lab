@@ -27,6 +27,7 @@ parser.add_argument('--timestep_freq', type=int, default=100, help='Every N time
 parser.add_argument('--report_freq', type=int, default=100, help='Reporting frequency')
 parser.add_argument('--max_episode_steps', type=int, default=None, help='Maximum episode steps')
 parser.add_argument('--eval_epochs', type=int, default=10, help='Maximum episode steps')
+parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
 
 # VRL-specific arguments
 parser.add_argument('--epsilon_start', type=float, default=1.0, help='Starting epsilon value')
@@ -34,7 +35,6 @@ parser.add_argument('--epsilon_end', type=float, default=0.01, help='Final epsil
 parser.add_argument('--epsilon_decay', type=float, default=0.002, help='Epsilon decay rate')
 parser.add_argument('--epsilon_decay_flag', action='store_true', help='Enable epsilon decay')
 parser.add_argument('--sync_freq', type=int, default=64, help='Synchronization steps')
-parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
 parser.add_argument('--memory_size', type=int, default=6000, help='Replay memory size')
     # DQN-specific arguments
 parser.add_argument('--std_init', type=float, default=0.5, help='Initial standard deviation for NoisyDQN')
@@ -45,11 +45,12 @@ parser.add_argument('--lmbda', type=float, default=0.95, help='Lambda parameter 
     # A2C-specific arguments
 parser.add_argument('--actor_lr', type=float, default=1e-3, help='Actor learning rate')
 parser.add_argument('--critic_lr', type=float, default=1e-4, help='Critic learning rate')
-parser.add_argument('--entropy_coef', type=float, default=0.001, help='Entropy coefficient')
+parser.add_argument('--entropy_coef', type=float, default=1e-3, help='Entropy coefficient')
+parser.add_argument('--horizon', type=int, default=200, help='Update every N steps')
         # PPO-specific arguments
-parser.add_argument('--update_freq', type=int, default=200, help='Update every N steps')
 parser.add_argument('--update_times', type=int, default=10, help='Update times in one updating')
 parser.add_argument('--eps_clip', type=float, default=0.2, help='Clip for PPO')
+parser.add_argument('--entropy_decay', type=float, default=0.99, help='Decay rate of entropy_coef')
 
 args = parser.parse_args()
 
@@ -73,6 +74,7 @@ class Args:
     alg_name:str = args.alg_name
     max_episode_steps:int = args.max_episode_steps
     eval_epochs:int = args.eval_epochs
+    batch_size:int = args.batch_size
 
     def __post_init__(self):
         pass
@@ -98,17 +100,17 @@ class A2CArgs(PRLArgs):
     actor_lr:float = args.actor_lr
     critic_lr:float = args.critic_lr
     entropy_coef:float = args.entropy_coef
+    horizon:int = args.horizon # update every 200 steps
 
 @dataclass(kw_only=True, frozen=False)
 class PPOArgs(A2CArgs):
-    update_freq:int = args.update_freq # update every 200 steps
     update_times:int = args.update_times
     eps_clip:float = args.eps_clip
+    entropy_decay:float = args.entropy_decay
 
 @dataclass(kw_only=True, frozen=False)
 class DQNArgs(VRLArgs):
     sync_freq:int = args.sync_freq   # sync target network with policy network
-    batch_size:int = args.batch_size
     memory_size:int = args.memory_size 
     pass
 

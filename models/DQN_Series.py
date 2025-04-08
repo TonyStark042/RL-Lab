@@ -27,7 +27,7 @@ class DQN(VRL):
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr) # only policy_net need optimizer
     
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
-    def act(self, state, mode:Literal["train", "evaluate"]="train"):
+    def act(self, state, mode:Literal["train", "evaluate", "test"]="train"):
         if mode == "train":
             if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
@@ -67,17 +67,16 @@ class DQN(VRL):
                 if terminated or truncated:
                     self.epoch_record.append(sum(rewards))
                     break
-
+            
+            self.epoch += 1
             if self.noise:
                 self.policy_net.reset_noise()
                 self.target_net.reset_noise()
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
-                    self.epoch += 1
             else:
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
-                    self.epoch += 1
             
             if early_stop or reach_maxTimestep:
                 break

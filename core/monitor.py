@@ -31,14 +31,14 @@ class RLMonitor:
             self.agent.best = state_dict
 
         if self.agent.epoch % self.agent.report_freq == 0:
-            message = f"Episode: {self.agent.epoch} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward} | History optimal: {self.agent.optimal_reward} "
+            message = f"Episode: {self.agent.epoch} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
             for k,v in kwargs.items():
                 message += f"| {k}: {v:.3f} "
             self.agent.logger.info(message)
     
         if self.agent.early_stop:
             if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
-                self.agent.logger.info(f"Converged at epoch: {self.agent.epoch}, final optimal reward: {mean_evaluate_reward}")
+                self.agent.logger.info(f"Converged at epoch: {self.agent.epoch}, final optimal reward: {mean_evaluate_reward: .3f}")
                 return True
                 
         return False
@@ -64,14 +64,14 @@ class RLMonitor:
                 self.agent.best = state_dict
 
             if self.agent.timestep % self.agent.report_freq == 0:
-                message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward} | History optimal: {self.agent.optimal_reward} "
+                message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
                 for k,v in kwargs.items():
                     message += f"| {k}: {v:.3f}"
                 self.agent.logger.info(message)
         
             if self.agent.early_stop:
                 if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
-                    self.agent.logger.info(f"Converged at timestep: {self.agent.timestep}, final optimal reward: {mean_evaluate_reward}")
+                    self.agent.logger.info(f"Converged at timestep: {self.agent.timestep}, final optimal reward: {mean_evaluate_reward: .3f}")
                     return True
             return False
         else:
@@ -170,3 +170,18 @@ class RLMonitor:
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         
         print(''.join(['=']*140))
+
+    def grad_report(self, *nets):
+        max_grad = float('-inf')
+        min_grad = float('inf')
+        for net in nets:
+            for name, param in net.named_parameters():
+                if param.grad is not None:
+                    current_max = param.grad.max().item()
+                    current_min = param.grad.min().item()
+                    if current_max > max_grad:
+                        max_grad = current_max
+                    if current_min < min_grad:
+                        min_grad = current_min
+        self.agent.logger.debug(f"Maximum gradient value: {max_grad}")
+        self.agent.logger.debug(f"Minimum gradient value: {min_grad}")

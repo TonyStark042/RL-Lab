@@ -18,7 +18,7 @@ PPO:
   gamma: 0.99
   is_gae: true
   lmbda: 0.95
-  update_freq: 100
+  horizon: 100
   update_times: 5
 REINFORCE:
   baseline: 0

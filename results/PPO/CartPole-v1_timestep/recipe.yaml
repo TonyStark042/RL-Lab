@@ -18,6 +18,6 @@ report_freq: 100
 reward_threshold: 475.0
 timestep_freq: 100
 train_mode: timestep
-update_freq: 100
+horizon: 100
 update_times: 5
 window_size: 10

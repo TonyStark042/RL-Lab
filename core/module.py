@@ -11,7 +11,7 @@ import copy
 import logging
 import yaml
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 class RL(ABC):
     def __init__(self, 
@@ -31,6 +31,7 @@ class RL(ABC):
         self.gamma:float = 0.99
         self.lr:float = 1e-4
         self.h_size:int = 32
+        self.batch_size:int = 64
         self.has_continuous_action_space: bool = True if env.action_space.dtype in [np.float32, np.float64] else False
         ## epoch_report related ##
         self.alg_name:str = kwargs.get("alg_name", None)
@@ -68,7 +69,7 @@ class RL(ABC):
         ## recoding arguments, variable ## 
         self.timestep = 0
         self.epoch = 0
-        self.optimal_reward = 0
+        self.optimal_reward = -np.inf
         self.best = None
         self.epoch_record = []
         self.timestep_record = {"timesteps": [], "rewards": []}
@@ -94,21 +95,10 @@ class RL(ABC):
         rewards = 0
 
         self.timestep_record['rewards'].append(rewards)
-
-    def single_evaluate(self):
-        s = self.eval_env.reset()[0]
-        epoch_reward = 0
-        while True:
-            a = self.act(s, mode="evaluate")
-            s, reward, terminated, truncated, info = self.eval_env.step(a)
-            epoch_reward += reward
-            if terminated or truncated:
-                break
-        return epoch_reward
     
-    def evaluate(self):
+    def evaluate(self, mode="evaluate"):
         """
-        Evaluate the model's performence by choosing the most likly or most valuable action.
+        Evaluate the model's performence in training process.
         """
         results = []
         # processes = min(mp.cpu_count(), self.eval_epochs)
@@ -118,7 +108,15 @@ class RL(ABC):
             # pool.close()
             # pool.join()
         for _ in range(self.eval_epochs):
-            results.append(self.single_evaluate())
+            epoch_reward = 0
+            s = self.eval_env.reset()[0]
+            while True:
+                a = self.act(s, mode=mode)
+                s, reward, terminated, truncated, info = self.eval_env.step(a.squeeze())
+                epoch_reward += reward
+                if terminated or truncated:
+                    break
+            results.append(epoch_reward)
         rewards = np.array(results)
         return rewards
     
@@ -137,7 +135,7 @@ class RL(ABC):
             model.load_state_dict(torch.load(para))
         self.logger.info(f"Loading model from {para}")
 
-        rewards = self.evaluate()
+        rewards = self.evaluate(mode="test")
         self.logger.info(f"{self.alg_name} in {self.env_name}, Average {self.eval_epochs} reward {np.mean(rewards):.3f}, Standard deviation {np.std(rewards):.3f}")
 
     def save(self, best=True):
@@ -203,15 +201,17 @@ class PRL(RL):
             assert all(abs(self.action_space.low) == abs(self.action_space.high)), "Continuous action space must be symmetric"
         self.max_action = self.env.action_space.high[0] if hasattr(self.env.action_space, "high") else 1
     
-    def gae(self, td_delta):
-        td_delta = td_delta.detach().numpy()
+    @torch.no_grad()
+    def gae(self, td_delta, is_terninated):
+        td_delta = td_delta.detach().numpy().flatten()
+        is_terninated = is_terninated.detach().numpy().flatten()
         advantages_list = []
         advantage = 0.0
-        for delta in td_delta[::-1]:
-            advantage = self.gamma * self.lmbda * advantage + delta
+        for delta, done in zip(td_delta[::-1], is_terninated[::-1]):
+            advantage = self.gamma * self.lmbda * advantage * done + delta
             advantages_list.append(advantage)
         advantages_list.reverse()
-        return torch.tensor(np.array(advantages_list), dtype=torch.float).to(self.device)
+        return torch.tensor(np.array(advantages_list), dtype=torch.float, device=self.device).unsqueeze(-1)
 
     def adapt_action(self, a):
         if self.has_continuous_action_space:

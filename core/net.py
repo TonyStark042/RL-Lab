@@ -117,8 +117,10 @@ class Policy_net(nn.Module):
         self.fc1 = nn.Linear(state_num, h_size)
         self.fc2 = nn.Linear(h_size, h_size*2)
         if has_continuous_action_space:
+            self.logstd = nn.Parameter(torch.zeros(action_num))
             self.mu = nn.Linear(h_size*2, action_num)
-            self.sigma = nn.Linear(h_size*2, action_num)
+            self.mu.weight.data.mul_(0.1)
+            self.mu.bias.data.mul_(0.0)
         else:
             self.fc3 = nn.Linear(h_size*2, action_num)
 
@@ -126,10 +128,11 @@ class Policy_net(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         if self.has_continuous_action_space:
-            mu = F.sigmoid(self.mu(x)).squeeze()   # mu全部等于1了？
-            sigma = F.softplus(self.sigma(x)).squeeze()
-            dist = Normal(mu, sigma) 
-            # dist = MultivariateNormal(mu, sigma)
+            # mu = F.sigmoid(self.mu(x)).squeeze()
+            mu = self.mu(x).squeeze()
+            logstd = self.logstd.expand_as(mu)
+            std = torch.exp(logstd)
+            dist = Normal(mu, std)
         else:
             probs = F.softmax(self.fc3(x), dim=1)
             dist = Categorical(probs) # support probs dim is greater than 1
