@@ -6,7 +6,7 @@ from core.module import VRL
 from core.args import VRLArgs
 
 
-class Q_learning(VRL):
+class Q_Learning(VRL):
     def __init__(self, env, args):
         super().__init__(env, args=args)
         self.Q = np.zeros((self.state_num, self.action_num))
@@ -23,7 +23,7 @@ class Q_learning(VRL):
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             cur_s, _ = self.env.reset()
             epoch_reward = 0
-            if self.alg_name == 'Q-Learning':
+            if self.alg_name == 'Q_Learning':
                 while True:
                     self.timestep += 1
                     a = self.act(cur_s)                      # behavior sugg，based on epsillon_greedy to choose the action.
@@ -64,6 +64,7 @@ class Q_learning(VRL):
             self.epoch += 1
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
+                reach_maxTimestep = False
 
             if early_stop or reach_maxTimestep:
                 break 

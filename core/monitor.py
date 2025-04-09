@@ -105,7 +105,7 @@ class RLMonitor:
         moving_std = []
         for index, reward_array in enumerate(Y_arrays):
             if index < self.agent.window_size:
-                moving_avg.append(reward_array.sum())
+                moving_avg.append(reward_array.mean())
                 moving_std.append(reward_array.std())
             else:
                 sliding_window = Y_arrays[index - self.agent.window_size + 1:index + 1]
@@ -165,7 +165,7 @@ class RLMonitor:
         print(tplt.format("Arg","Value","Type"))
         
         for k, v in self.agent.__dict__.items():
-            if k in ["env", "logger", "monitor", "custom_args"]:
+            if k in ["env", "logger", "monitor", "custom_args", "model_name"]:
                 continue
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         

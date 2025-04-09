@@ -16,25 +16,37 @@ RL-Lab/
 
 ```
 
-## Single Run Examples
+## Train model
 > [!IMPORTANT]
 > These examples demonstrate minimal runnable instances. Check `core/args.py` for all available arguments that can be customized for each algorithm.
 
-The basic command template is:
+The basic command templates are:  (the unspecified parameter will adopt default value)
+```shell
+# Train via command line
+python train.py --algname [name] --env_name [env_name] --max_timesteps [N]
 
-`python main --algname [name] --env [env_name] --max_timesteps [N]`
+# Train via YAML config
+python train.py --algname [name] --config [recipe_path]
+```
 
-For example:
+For example, :
+```shell
+# Train via command line
+python train.py --alg_name REINFORCE --env_name CartPole-v1 --max_timesteps 20000
 
-`python main.py --alg_name REINFORCE --env CartPole-v1 --max_timesteps 30000`
+# Train via YAML config
+python train.py --alg_name REINFORCE --config recipes/REINFORCE.yaml 
+```
 
-And the learning curve:
+Then the model, recipe and learning curve will be saved at `results/`, and the learning curve looks like:
 
 <img src="https://pic1.imgdb.cn/item/67eb916b0ba3d5a1d7e8fcf1" alt="timstep example" width="550" height="350">
 
 The default `train_mode` is **timestep**. You can also train models from **episode** view, such as:
 
-`python main.py --alg_name REINFORCE --env CartPole-v1 --train_mode episode --max_epochs 300 `
+```
+python main.py --alg_name REINFORCE --env_name CartPole-v1 --train_mode episode --max_epochs 300 
+```
 
 When switching from max_timesteps to max_epochs, the X-axis of the learning curve will change from timesteps to episodes accordingly.
 
@@ -44,7 +56,7 @@ When switching from max_timesteps to max_epochs, the X-axis of the learning curv
 
 The `alg_name` must be choosen from below:
 
- - **Q-Learning**
+ - **Q_Learning**
  - **Sarsa**
  - **REINFORCE**
  - **DQN Series**
@@ -52,8 +64,16 @@ The `alg_name` must be choosen from below:
  - **A2C**
  - **PPO**
 
+## Test model
+You can test the model performance by:
+```shell
+# Train via result YAML config
+python test.py --algname [name] --config [result_recipe_path]
+```
+
+
 ## Compare Different Algorithms
-You can modify the [compare.yaml](./compare.yaml), set the shared parameters that can be used by all algorithms, as well as set the hyperparameters specific to each algorithm.
+You can modify the [compare.yaml](.recieps/compare.yaml), set the shared parameters that can be used by all algorithms, as well as set the hyperparameters specific to each algorithm.
 ```
 python compare.py
 ```
@@ -61,5 +81,5 @@ python compare.py
 <img src="https://pic1.imgdb.cn/item/67ebc7060ba3d5a1d7e91d32" alt="episode example" width="550" height="350">
 
 
-The result will be saved at `result/comparison`. Your parameter settings will be automatically synchronized here for reproducing the results. Then you can modify the [compare.yaml](./compare.yaml) for another comparison experiment.
+The result will be saved at `result/comparison`. Your parameter settings will be automatically synchronized here for reproducing the results. Then you can modify the [compare.yaml](.recieps/compare.yaml) for another comparison experiment.
 

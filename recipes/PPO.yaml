@@ -1,0 +1,10 @@
+env_name: HalfCheetah-v5  # CartPole-v1
+train_mode: timestep  # episode
+max_timesteps: 1000000
+# max_epochs: 1000
+is_gae: True
+h_size: 128
+actor_lr: 0.0003
+critic_lr: 0.0002
+horizon: 2048
+update_times: 10

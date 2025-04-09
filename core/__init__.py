@@ -1,5 +1,5 @@
-noDeepLearning = ["Q-Learning", "Sarsa"]
-VModels = ["Q-Learning", 
+noDeepLearning = ["Q_Learning", "Sarsa"]
+VModels = ["Q_Learning", 
             "Sarsa", 
             "DQN", ]
 PModels = ["REINFORCE", "PPO", "A2C"]

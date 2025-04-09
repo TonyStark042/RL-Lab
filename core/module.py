@@ -11,7 +11,7 @@ import copy
 import logging
 import yaml
 
-logging.basicConfig(level=logging.DEBUG, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 class RL(ABC):
     def __init__(self, 
@@ -21,44 +21,21 @@ class RL(ABC):
                  ): 
         ## hyperparameters, loading from arguments ##
         self.env = env
-        self.env_name = env.spec.id
-        self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make
-        self.max_epochs:int = np.inf
-        self.max_timesteps:int = np.inf
-        self.reward_threshold:float = None
-        self.early_stop:bool = True
-        self.baseline:float = 0
-        self.gamma:float = 0.99
-        self.lr:float = 1e-4
-        self.h_size:int = 32
-        self.batch_size:int = 64
+        self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make, or use the default value
         self.has_continuous_action_space: bool = True if env.action_space.dtype in [np.float32, np.float64] else False
-        ## epoch_report related ##
-        self.alg_name:str = kwargs.get("alg_name", None)
         self.model_name:str = kwargs.get("model_name", None)
-        self.timestep_freq:int = None 
-        self.report_freq :int = None
-        self.window_size:int = 10
-        self.eval_epochs:int = 10
         ## loading asigned arguments from args ##
         default_args = asdict(args)
         default_args.pop("max_episode_steps")
         default_args.update(kwargs)
         for k, v in default_args.items():
             setattr(self, k, v)
-
         ## logger ##
         self.logger = logging.getLogger(name=self.alg_name)
         self.monitor = RLMonitor(self)
         self.monitor._check_args()
         # record above arguments, must be after checking, the reward_threshold will be reset
-        self.args = self.__dict__.copy()  
-        self.args.pop("monitor")
-        self.args.pop("logger")
-        self.args.pop("model_name")
-        self.args.pop("env")
-        self.args.pop("mode")
-
+        self.args = self.__dict__.copy()
         ## env related attributes ##
         self.eval_env = copy.deepcopy(env)
         self.action_space = self.env.action_space
@@ -148,13 +125,12 @@ class RL(ABC):
         result_path = self.monitor._check_dir()        
 
         running_para = self.args
-        if self.alg_name in noDeepLearning:
-            running_para.pop("lr")
-            running_para.pop("h_size")
-        elif "PPO" in self.alg_name or "A2C" in self.alg_name:
-            running_para.pop("lr")
-        elif "Noisy" not in self.alg_name and "DQN" in self.alg_name:
-            running_para.pop("std_init")
+        running_para.pop("monitor")
+        running_para.pop("logger")
+        running_para.pop("model_name")
+        running_para.pop("env")
+        running_para.pop("mode")
+        running_para.pop("has_continuous_action_space")
 
         with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)

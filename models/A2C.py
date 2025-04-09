@@ -65,6 +65,7 @@ class A2C(PRL):
 
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
+                reach_maxTimestep = False
                 
             if early_stop or reach_maxTimestep:
                 break

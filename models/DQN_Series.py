@@ -31,13 +31,13 @@ class DQN(VRL):
         if mode == "train":
             if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
-                action = self.policy_net(state).argmax().item()
+                action = self.policy_net(state).argmax()
             else:
                 action = self.epsilon_greedy(state)
         else:
             state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
-            action = self.policy_net(state).argmax().item()
-        return action
+            action = self.policy_net(state).argmax()
+        return action.cpu().numpy()
 
     def train(self):
         start = time.time()
@@ -74,9 +74,11 @@ class DQN(VRL):
                 self.target_net.reset_noise()
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
+                    reach_maxTimestep = False
             else:
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
+                    reach_maxTimestep = False
             
             if early_stop or reach_maxTimestep:
                 break
@@ -89,7 +91,7 @@ class DQN(VRL):
         
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
-        actions = torch.tensor(actions, device=self.device).unsqueeze(1)  
+        actions = torch.tensor(np.array(actions), device=self.device).unsqueeze(-1)
         rewards = torch.tensor(rewards, device=self.device, dtype=torch.float)  
         next_states = torch.tensor(np.array(next_states), device=self.device, dtype=torch.float)
         dones = torch.tensor(np.float32(dones), device=self.device)

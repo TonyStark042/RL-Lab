@@ -1,0 +1,6 @@
+env_name: CartPole-v1
+train_mode: timestep
+max_timesteps: 20000
+## max_epochs: inf
+early_stop: True
+lr: 0.001

@@ -8,11 +8,11 @@ from torch.distributions import Categorical
 from collections import deque
 from core.module import PRL
 from core.net import Policy_net
-from core.args import PRLArgs
+from core.args import REINFORCEArgs
 
 
 class REINFORCE(PRL):
-    def __init__(self, env, args):       
+    def __init__(self, env, args:REINFORCEArgs):       
         super().__init__(env=env, args=args, model_name="policy_net")
         self.policy_net = Policy_net(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
@@ -58,6 +58,7 @@ class REINFORCE(PRL):
 
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
+                reach_maxTimestep = False
                 
             if early_stop or reach_maxTimestep:
                 break
