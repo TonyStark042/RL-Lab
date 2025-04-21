@@ -1,9 +1,14 @@
-env_name: CartPole-v1
-alg_name: DoubleDuelingNoisyDQN
-lr: 0.001
-train_mode: timestep
-max_timesteps: 15000
+env_name: CliffWalking-v0 # CliffWalking-v0 # CartPole-v1
+alg_name: DQN # DoubleDuelingNoisyDQN
+lr: 0.0001
+train_mode: episode # timestep
+max_epochs: 1000
+max_episode_steps: 300
+report_freq: 10
+# max_timesteps: 15000
 sync_freq: 64
 memory_size: 5000
 timestep_freq: 100
 std_init: 0.5
+norm_obs: True
+norm_reward: True

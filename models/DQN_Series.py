@@ -15,13 +15,13 @@ import os
 
 class DQN(VRL):
     def __init__(self, env, args:VRLArgs=None):
-        super().__init__(env, args=args, model_name="policy_net",)
+        super().__init__(env, args=args, model_names=["policy_net"],)
         if "Dueling" in self.alg_name:
-            self.policy_net = Dueling_Q_net(self.state_num, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
-            self.target_net = Dueling_Q_net(self.state_num, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
+            self.policy_net = Dueling_Q_net(self.state_dim, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
+            self.target_net = Dueling_Q_net(self.state_dim, self.action_num, self.h_size, self.noise, self.std_init).to(self.device)
         else:
-            self.policy_net = Q_net(self.state_num, self.action_num, self.h_size, self.noise).to(self.device)
-            self.target_net = Q_net(self.state_num, self.action_num, self.h_size, self.noise).to(self.device)
+            self.policy_net = Q_net(self.state_dim, self.action_num, self.h_size, self.noise).to(self.device)
+            self.target_net = Q_net(self.state_dim, self.action_num, self.h_size, self.noise).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.memory = ReplayBuffer(self.memory_size)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr) # only policy_net need optimizer
@@ -35,12 +35,13 @@ class DQN(VRL):
             else:
                 action = self.epsilon_greedy(state)
         else:
-            state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+            state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
             action = self.policy_net(state).argmax()
         return action.cpu().numpy()
 
     def train(self):
         start = time.time()
+        reach_maxTimestep = False
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             rewards = []
             s = self.env.reset()[0]
@@ -74,11 +75,9 @@ class DQN(VRL):
                 self.target_net.reset_noise()
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
-                    reach_maxTimestep = False
             else:
                 if self.train_mode == "episode":
                     early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
-                    reach_maxTimestep = False
             
             if early_stop or reach_maxTimestep:
                 break
@@ -90,22 +89,22 @@ class DQN(VRL):
             return 0.0
         
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
-        states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
-        actions = torch.tensor(np.array(actions), device=self.device).unsqueeze(-1)
+        states = torch.tensor(np.array(states), device=self.device, dtype=torch.float).view(self.batch_size, -1)
+        actions = torch.tensor(np.array(actions), device=self.device).view(self.batch_size, -1)
         rewards = torch.tensor(rewards, device=self.device, dtype=torch.float)  
-        next_states = torch.tensor(np.array(next_states), device=self.device, dtype=torch.float)
+        next_states = torch.tensor(np.array(next_states), device=self.device, dtype=torch.float).view(self.batch_size, -1)
         dones = torch.tensor(np.float32(dones), device=self.device)
 
-        Q_values = self.policy_net(states).gather(dim=1, index=actions)
+        Q_values = self.policy_net(states).gather(dim=1, index=actions).view(self.batch_size, -1)
         
         if "Double" in self.alg_name:
             next_actions = self.policy_net(next_states).argmax(dim=1, keepdim=True) # Q_net select next action, but evaluated by target_net
             next_Q = self.target_net(next_states).gather(1, next_actions).squeeze()
         else:
-            next_Q = self.target_net(next_states).max(dim=1)[0].detach()            
+            next_Q = self.target_net(next_states).max(dim=1)[0].detach() # normal DQN has overestimation bias due to always select <max>.   
         
         targets = rewards + self.gamma * next_Q * (1 - dones)
-        loss = nn.MSELoss()(Q_values, targets.unsqueeze(1))
+        loss = nn.MSELoss()(Q_values, targets.view(self.batch_size, -1))
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()

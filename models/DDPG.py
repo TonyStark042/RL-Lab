@@ -1,0 +1,162 @@
+import time
+from typing import Literal
+import gymnasium as gym
+import torch
+from core.module import RL
+from core.buffer import ReplayBuffer
+from core.args import PRLArgs
+from core.net import Critic_Qnet, Determin_PolicyNet
+from torch import nn
+import numpy as np
+
+class DDPG(RL):
+    def __init__(self, env, args):
+        super().__init__(env=env, args=args, model_names=["actor", "critic"],)
+        self.buffer = ReplayBuffer()
+        self.noise = OUNoise(env.action_space, decay_period=self.max_timesteps) if self.noise_type == "OU" else GaussianNoise(env.action_space)
+        self.actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
+        self.critic = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
+        self.trg_actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
+        self.trg_critic = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
+        self.trg_actor.load_state_dict(self.actor.state_dict())
+        self.trg_critic.load_state_dict(self.critic.state_dict())
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), self.actor_lr)
+        self.critic_optimizer =  torch.optim.Adam(self.critic.parameters(), self.critic_lr)                                                  
+    
+    def act(self, state, mode: Literal["train", "evaluate", "test"] = "train"): 
+        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
+        action = self.actor(state).squeeze().detach().cpu().numpy()
+        # if mode != "test":
+        #     action = self.noise.get_action(action, self.timestep)
+        return action
+
+    def train(self):
+        start = time.time()
+        reach_maxTimestep = False
+        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
+            cur_s = self.env.reset()[0]
+            rewards = []
+            while True:
+                a = self.act(cur_s)
+                next_s, reward, terminated, truncated, info = self.env.step(a.squeeze())
+
+                trainsition = (cur_s, next_s, a, reward, terminated or truncated)
+                self.buffer.add(trainsition)
+                rewards.append(reward)
+
+                cur_s = next_s
+                self.timestep += 1
+
+                actor_Qvalue, critic_loss = self._update()
+                # if self.timestep % self.sync_freq == 0:
+                #     self.trg_actor.load_state_dict(self.actor.state_dict())
+                #     self.trg_critic.load_state_dict(self.critic.state_dict())
+                
+                if self.train_mode == "timestep":
+                    early_stop = self.monitor.timestep_report(actor_Qvalue=actor_Qvalue, critic_loss=critic_loss)
+                    reach_maxTimestep = self.timestep >= self.max_timesteps
+                    if early_stop or reach_maxTimestep:
+                        break
+
+                if terminated or truncated:
+                    self.epoch_record.append(sum(rewards))
+                    break
+            
+            self.epoch += 1
+            if self.train_mode == "episode":
+                early_stop = self.monitor.epoch_report(actor_Qvalue=actor_Qvalue, critic_loss=critic_loss)
+
+            if early_stop or reach_maxTimestep:
+                break
+        end = time.time()
+        self.training_time += (end - start)
+
+    def _update(self):
+        if len(self.buffer) < self.batch_size:
+            return 0.0, 0.0
+        
+        batch = self.buffer.sample(self.batch_size)
+        state, next_state, action, reward, done = batch
+        state = torch.FloatTensor(np.array(state)).to(self.device)
+        next_state = torch.FloatTensor(np.array(next_state)).to(self.device)
+        action = torch.FloatTensor(np.array(action)).to(self.device)
+        reward = torch.FloatTensor(reward).to(self.device).unsqueeze(1)
+        done = torch.FloatTensor(done).to(self.device).unsqueeze(1)
+
+        Q_value = self.critic(state, action)
+        next_action = self.trg_actor(next_state)
+        next_Q_value = self.trg_critic(next_state, next_action)
+        target_Q_value = reward + (1 - done) * self.gamma * next_Q_value
+
+        critic_loss = nn.MSELoss()(Q_value, target_Q_value.detach())
+        curr_action = self.actor(state)  # Current actor's action, can't use buffer's action
+        actor_loss = -self.critic(state, curr_action).mean()
+
+        self.critic_optimizer.zero_grad()
+        self.actor_optimizer.zero_grad()
+        critic_loss.backward()
+        actor_loss.backward()
+        self.critic_optimizer.step()
+        self.actor_optimizer.step()
+
+        # soft update
+        for param, target_param in zip(self.critic.parameters(), self.trg_critic.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+        for param, target_param in zip(self.actor.parameters(), self.trg_actor.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+        return actor_loss.item(), critic_loss.item()
+
+class OUNoise(object):
+    '''
+    Ornstein–Uhlenbeck noise
+    '''
+    def __init__(self, action_space, mu=0.0, theta=0.15, max_sigma=0.3, min_sigma=0.3, decay_period=100000):
+        self.mu = mu 
+        self.theta = theta 
+        self.sigma = max_sigma 
+        self.max_sigma = max_sigma
+        self.min_sigma = min_sigma
+        self.decay_period = decay_period
+        self.n_actions = action_space.shape[0]
+        self.low = action_space.low
+        self.high = action_space.high
+        self.reset()
+
+    def reset(self):
+        self.obs = np.ones(self.n_actions) * self.mu
+
+    def generate_noise(self):
+        x  = self.obs
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.n_actions)
+        self.obs = x + dx
+        return self.obs
+    
+    def get_action(self, action, t=0):
+        ou_obs = self.generate_noise()
+        self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma) * min(1.0, t / self.decay_period)
+        return np.clip(action + ou_obs, self.low, self.high)
+
+class GaussianNoise:
+    def __init__(self, action_space, mu=0.0, std=0.001, decay_factor=0.99, min_std=0.0001):
+        self.mu = mu
+        self.std = std
+        self.initial_std = std
+        self.decay_factor = decay_factor
+        self.min_std = min_std
+        self.low = action_space.low
+        self.high = action_space.high
+        self.shape = action_space.shape
+
+    def reset(self):
+        self.std = self.initial_std
+
+    def generate_noise(self):
+        return np.random.normal(self.mu, self.std, size=self.shape)
+
+    def get_action(self, action, t=0):
+        noise = self.generate_noise()
+        # Decay std over time
+        self.std = max(self.min_std, self.std * self.decay_factor)
+        return np.clip(action + noise, self.low, self.high)

@@ -31,6 +31,8 @@ parser.add_argument('--report_freq', type=int, help='Reporting frequency')
 parser.add_argument('--max_episode_steps', type=int, help='Maximum episode steps')
 parser.add_argument('--eval_epochs', type=int, help='Maximum episode steps')
 parser.add_argument('--batch_size', type=int, help='Batch size')
+parser.add_argument('--norm_obs', action="store_true", help='Normalize observation')
+parser.add_argument('--norm_reward', action="store_true", help='Normalize reward')
 ## VRL-specific arguments ##
 parser.add_argument('--epsilon_start', type=float, help='Starting epsilon value')
 parser.add_argument('--epsilon_end', type=float, help='Final epsilon value')
@@ -52,6 +54,8 @@ parser.add_argument('--horizon', type=int, help='Update every N steps')
 parser.add_argument('--update_times', type=int, help='Update times in one updating')
 parser.add_argument('--eps_clip', type=float, help='Clip for PPO')
 parser.add_argument('--entropy_decay', type=float, help='Decay rate of entropy_coef')
+## DDPG-specific arguments ##
+parser.add_argument('--noise_type', type=str, choices=["Gaussian", "OU"], help='Noise type for exploration')
 
 
 @dataclass(kw_only=True, frozen=False)
@@ -72,6 +76,8 @@ class BasicArgs:
     report_freq:int = 100
     max_episode_steps:int = None
     eval_epochs:int = 10
+    norm_obs:bool = False
+    norm_reward:bool = False
 
     def __post_init__(self):
         base_args, _ = parser.parse_known_args()
@@ -142,6 +148,12 @@ class DQNArgs(VRLArgs):
     # NoisyDQN
     std_init:float = 0.5
 
+@dataclass(kw_only=True, frozen=False)
+class DDPGArgs(A2CArgs):
+    memory_size:int = 10000
+    batch_size:int = 256
+    noise_type:str = "Gaussian"
+    tau:float = 0.01 # soft update
 
 ARGS_MAP = {
     "Q_Learning": VRLArgs,
@@ -150,4 +162,5 @@ ARGS_MAP = {
     "A2C": A2CArgs,
     "PPO": PPOArgs,
     "DQN": DQNArgs,
+    "DDPG": DDPGArgs,
 }

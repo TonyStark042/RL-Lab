@@ -6,5 +6,8 @@ is_gae: True
 h_size: 128
 actor_lr: 0.0003
 critic_lr: 0.0002
+batch_size: 256
 horizon: 2048
 update_times: 10
+# norm_obs: True
+# norm_reward: True

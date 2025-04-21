@@ -11,8 +11,9 @@ from core.buffer import ReplayBuffer
 
 class A2C(PRL):
     def __init__(self, env, args:PRLArgs) -> None:
-        super().__init__(env, args=args, model_name="model")
-        self.model = ActorCritic(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
+        super().__init__(env, args=args, model_names=["model"])
+        action_shape = self.action_dim if self.has_continuous_action_space else self.action_num
+        self.model = ActorCritic(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
         self.actor_optimizer = optim.Adam(self.model.actor.parameters(), lr=self.actor_lr)
         self.critic_optimizer = optim.Adam(self.model.critic.parameters(), lr=self.critic_lr)
         self.buffer = ReplayBuffer()
@@ -36,6 +37,7 @@ class A2C(PRL):
         
     def train(self):
         start = time.time()
+        reach_maxTimestep = False
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             s = self.env.reset()[0]
             rewards = []
@@ -65,7 +67,6 @@ class A2C(PRL):
 
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
-                reach_maxTimestep = False
                 
             if early_stop or reach_maxTimestep:
                 break

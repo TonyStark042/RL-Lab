@@ -4,6 +4,7 @@ from models.PPO import PPO
 from models.REINFORCE import REINFORCE
 from models.A2C import A2C
 from models.DQN_Series import DQN
+from models.DDPG import DDPG
 from core.args import *
 
 MODEL_MAP = {
@@ -13,4 +14,5 @@ MODEL_MAP = {
     "A2C": A2C,
     "PPO": PPO,
     "DQN": DQN,
+    "DDPG": DDPG,
 }

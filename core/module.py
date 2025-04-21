@@ -11,6 +11,9 @@ import copy
 import logging
 import yaml
 
+
+
+
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 class RL(ABC):
@@ -23,7 +26,7 @@ class RL(ABC):
         self.env = env
         self.max_episode_steps = self.env.spec.max_episode_steps # passed when gym.make, or use the default value
         self.has_continuous_action_space: bool = True if env.action_space.dtype in [np.float32, np.float64] else False
-        self.model_name:str = kwargs.get("model_name", None)
+        self.model_names:str = kwargs.get("model_names", None)
         ## loading asigned arguments from args ##
         default_args = asdict(args)
         default_args.pop("max_episode_steps")
@@ -37,17 +40,23 @@ class RL(ABC):
         # record above arguments, must be after checking, the reward_threshold will be reset
         self.args = self.__dict__.copy()
         ## env related attributes ##
-        self.eval_env = copy.deepcopy(env)
-        self.action_space = self.env.action_space
-        self.action_num =  sum(self.env.action_space.shape) if env.action_space.dtype in (np.float32, np.float64) else self.env.action_space.n
+        # if self.norm_obs or self.norm_reward:
+        #     self.env = DummyVecEnv([lambda: self.env])
+        #     self.env = VecNormalize(self.env, norm_obs=self.norm_obs, norm_reward=self.norm_reward, clip_obs=10.)
+        self.eval_env = copy.deepcopy(self.env)
+        self.action_space = self.env.action_space  # high and low are only available in continuous action space
+        self.action_dim =  self.action_space.shape[0] if self.has_continuous_action_space else 1
+        self.action_num = np.inf if self.has_continuous_action_space else self.action_space.n
         self.state_space = self.env.observation_space
-        self.state_num = sum(self.env.observation_space.shape) if env.observation_space.dtype in (np.float32, np.float64) else self.env.observation_space.n
+        self.state_dim = self.state_space.shape[0] if len(self.state_space.shape) != 0 else 1
+        self.state_num = self.state_space.n if hasattr(self.state_space, "n") else np.inf
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         ## recoding arguments, variable ## 
         self.timestep = 0
         self.epoch = 0
         self.optimal_reward = -np.inf
-        self.best = None
+        self.best = {}
         self.epoch_record = []
         self.timestep_record = {"timesteps": [], "rewards": []}
         self.training_time = 0
@@ -108,8 +117,10 @@ class RL(ABC):
             self.Q = np.load(para, allow_pickle=True)
         else:
             para = os.path.join(result_dir, "weight.pth")
-            model = getattr(self, self.model_name)
-            model.load_state_dict(torch.load(para))
+            models_dict = torch.load(para)
+            for net_name, state_dict in models_dict.items():
+                model = getattr(self, net_name)
+                model.load_state_dict(state_dict)
         self.logger.info(f"Loading model from {para}")
 
         rewards = self.evaluate(mode="test")
@@ -119,7 +130,7 @@ class RL(ABC):
         """
         Save the specified model's state dict.
         Args:
-            model_name (str): The name of the model attribute to save. Defaults to 'policy_net';
+            model_names (str): The name of the model attribute to save. Defaults to 'policy_net';
             best (str): Whether to save the history best model, or will save the last episode's model if set to False
         """
         result_path = self.monitor._check_dir()        
@@ -127,7 +138,7 @@ class RL(ABC):
         running_para = self.args
         running_para.pop("monitor")
         running_para.pop("logger")
-        running_para.pop("model_name")
+        running_para.pop("model_names")
         running_para.pop("env")
         running_para.pop("mode")
         running_para.pop("has_continuous_action_space")
@@ -135,19 +146,19 @@ class RL(ABC):
         with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)
 
+        save_dict = {}
         if self.alg_name not in noDeepLearning:
+            for net_name in self.model_names:
+                if best:
+                    save_dict[net_name] = self.best[net_name].state_dict()
+                else:
+                    save_dict[net_name] = getattr(self, net_name).state_dict()
             save_path = os.path.join(result_path, f"weight.pth")
-            if best:
-                torch.save(self.best.state_dict(), save_path)
-            else:
-                model = getattr(self, self.model_name)
-                torch.save(model.state_dict(), save_path)
-            self.logger.info(f"Model {self.alg_name}'s {self.model_name} has been saved at {save_path}, best {best}")
+            torch.save(save_dict, save_path)
+            self.logger.info(f"Model {self.alg_name}'s {self.model_names} has been saved at {save_path}, best {best}")
         else:
             save_path = os.path.join(result_path, f"Q_table.npy")
             np.save(save_path, self.Q)
-
-
 
 
 class VRL(RL):
@@ -165,7 +176,7 @@ class VRL(RL):
             self.epsilon = self.epsilon_start  
 
         if np.random.rand() < self.epsilon:             
-            return np.random.randint(self.action_num)
+            return torch.randint(self.action_dim, (1,1))
         else: 
             return self.act(state, mode="evaluate")  # otherwise, choose the best action based on policy
 

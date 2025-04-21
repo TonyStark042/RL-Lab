@@ -27,8 +27,9 @@ class RLMonitor:
         
         if mean_evaluate_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
             self.agent.optimal_reward = mean_evaluate_reward
-            state_dict = getattr(self.agent, self.agent.model_name)
-            self.agent.best = state_dict
+            for net_name in self.agent.model_names:
+                model = getattr(self.agent, net_name)
+                self.agent.best[net_name] = model
 
         if self.agent.epoch % self.agent.report_freq == 0:
             message = f"Episode: {self.agent.epoch} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
@@ -60,8 +61,9 @@ class RLMonitor:
         
             if mean_evaluate_reward >= self.agent.optimal_reward and self.agent.alg_name not in noDeepLearning:
                 self.agent.optimal_reward = mean_evaluate_reward
-                state_dict = getattr(self.agent, self.agent.model_name)
-                self.agent.best = state_dict
+                for net_name in self.agent.model_names:
+                    model = getattr(self.agent, net_name)
+                    self.agent.best[net_name] = model
 
             if self.agent.timestep % self.agent.report_freq == 0:
                 message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
@@ -148,7 +150,7 @@ class RLMonitor:
             raise ValueError("reward_threshold must be a non-negative number.")
         if self.agent.max_episode_steps is None:
             self.agent.logger.warning("max_episode_steps is not specified, please make sure the env must have an end.")
-        if self.agent.model_name is None and self.agent.alg_name not in noDeepLearning:
+        if self.agent.model_names is None and self.agent.alg_name not in noDeepLearning:
             raise ValueError("Please specify the name of learnable policy net or Q net, which will be used in saving and updating best model")
         if self.agent.alg_name is None:
             raise ValueError("Please specify the name of the algorithm, which will be used in saving model and learning curve")
@@ -165,7 +167,7 @@ class RLMonitor:
         print(tplt.format("Arg","Value","Type"))
         
         for k, v in self.agent.__dict__.items():
-            if k in ["env", "logger", "monitor", "custom_args", "model_name"]:
+            if k in ["env", "logger", "monitor", "custom_args", "model_names"]:
                 continue
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         

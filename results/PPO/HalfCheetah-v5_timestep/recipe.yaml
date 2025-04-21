@@ -1,9 +1,9 @@
 actor_lr: 0.0003
 alg_name: PPO
 baseline: 0
-batch_size: 64
+batch_size: 256
 critic_lr: 0.0002
-early_stop: false
+early_stop: true
 entropy_coef: 0.001
 entropy_decay: 0.99
 env_name: HalfCheetah-v5
@@ -11,13 +11,12 @@ eps_clip: 0.2
 eval_epochs: 10
 gamma: 0.99
 h_size: 128
-has_continuous_action_space: true
 horizon: 2048
 is_gae: true
 lmbda: 0.95
 max_episode_steps: 1000
 max_epochs: .inf
-max_timesteps: 1000000.0
+max_timesteps: 1000000
 report_freq: 100
 reward_threshold: 4800.0
 timestep_freq: 100

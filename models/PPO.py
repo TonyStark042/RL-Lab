@@ -14,13 +14,14 @@ from utils import normalize
 
 class PPO(PRL):
     def __init__(self, env, args: PRLArgs):
-        super().__init__(env=env, args=args, model_name="act_policy",)
+        super().__init__(env=env, args=args, model_names=["act_policy"],)
         self.buffer = ReplayBuffer()
-        self.trg_policy = ActorCritic(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
+        action_shape = self.action_dim if self.has_continuous_action_space else self.action_num
+        self.trg_policy = ActorCritic(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
         self.critic_optimizer =  torch.optim.Adam(self.trg_policy.critic.parameters(), self.critic_lr)
 
-        self.act_policy = ActorCritic(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
+        self.act_policy = ActorCritic(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
         self.act_policy.load_state_dict(self.trg_policy.state_dict())
                                                                     
         self.criterion = nn.MSELoss()

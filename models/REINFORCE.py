@@ -13,8 +13,9 @@ from core.args import REINFORCEArgs
 
 class REINFORCE(PRL):
     def __init__(self, env, args:REINFORCEArgs):       
-        super().__init__(env=env, args=args, model_name="policy_net")
-        self.policy_net = Policy_net(self.state_num, self.action_num, self.h_size, self.has_continuous_action_space).to(self.device)
+        super().__init__(env=env, args=args, model_names=["policy_net"])
+        action_shape = self.action_dim if self.has_continuous_action_space else self.action_num
+        self.policy_net = Policy_net(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
     
     def act(self, state, mode:Literal["train", "evaluate", "test"] = "train"):
@@ -31,6 +32,7 @@ class REINFORCE(PRL):
 
     def train(self):
         start = time.time()
+        reach_maxTimestep = False
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             self.log_probs = []
             self.rewards = []
@@ -58,7 +60,6 @@ class REINFORCE(PRL):
 
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
-                reach_maxTimestep = False
                 
             if early_stop or reach_maxTimestep:
                 break

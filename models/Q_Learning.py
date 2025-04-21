@@ -9,7 +9,7 @@ from core.args import VRLArgs
 class Q_Learning(VRL):
     def __init__(self, env, args):
         super().__init__(env, args=args)
-        self.Q = np.zeros((self.state_num, self.action_num))
+        self.Q = np.zeros((self.state_dim, self.action_dim))
     
     def act(self, state, mode:Literal["train", "evaluate", "test"]="train"):
         if mode == "train":
@@ -22,6 +22,7 @@ class Q_Learning(VRL):
         start = time.time()
         while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
             cur_s, _ = self.env.reset()
+            reach_maxTimestep = False
             epoch_reward = 0
             if self.alg_name == 'Q_Learning':
                 while True:
@@ -64,7 +65,6 @@ class Q_Learning(VRL):
             self.epoch += 1
             if self.train_mode == "episode":
                 early_stop = self.monitor.epoch_report()
-                reach_maxTimestep = False
 
             if early_stop or reach_maxTimestep:
                 break 
