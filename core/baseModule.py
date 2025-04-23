@@ -10,6 +10,7 @@ from core import noDeepLearning
 import copy
 import logging
 import yaml
+import time
 
 
 
@@ -58,16 +59,14 @@ class RL(ABC):
         self.optimal_reward = -np.inf
         self.best = {}
         self.epoch_record = []
-        self.timestep_record = {"timesteps": [], "rewards": []}
+        self.timestep_eval = {"timesteps": [], "rewards": []}
+        if self.episode_eval_freq is not None:
+            self.episode_eval = {"timesteps": [], "rewards": []}
         self.training_time = 0
 
     @abstractmethod
     def act(self, state, mode="train"):
         raise NotImplementedError("Subclasses must implement act()")
-
-    @abstractmethod
-    def train(self):
-        raise NotImplementedError("Subclasses must implement train()")
 
     @abstractmethod
     def _update(self):
@@ -77,27 +76,21 @@ class RL(ABC):
         """
         Evaluate the model's performence at interval of timesteps.
         """
-        self.timestep_record['timesteps'].append(timestep)
+        self.timestep_eval['timesteps'].append(timestep)
         rewards = 0
 
-        self.timestep_record['rewards'].append(rewards)
+        self.timestep_eval['rewards'].append(rewards)
     
     def evaluate(self, mode="evaluate"):
         """
         Evaluate the model's performence in training process.
         """
         results = []
-        # processes = min(mp.cpu_count(), self.eval_epochs)
-        # with mp.Pool(processes=processes) as pool:
-        # with ThreadPoolExecutor(processes) as pool: 
-        #     results = list(pool.map(self.single_evaluate, range(self.eval_epochs)))
-            # pool.close()
-            # pool.join()
         for _ in range(self.eval_epochs):
             epoch_reward = 0
             s = self.eval_env.reset()[0]
             while True:
-                a = self.act(s, mode=mode)
+                a = self.act(s, deterministic=True)
                 s, reward, terminated, truncated, info = self.eval_env.step(a.squeeze())
                 epoch_reward += reward
                 if terminated or truncated:
@@ -176,9 +169,9 @@ class VRL(RL):
             self.epsilon = self.epsilon_start  
 
         if np.random.rand() < self.epsilon:             
-            return torch.randint(self.action_dim, (1,1))
+            return np.random.randint(self.action_dim + 1) # torch.randint(self.action_dim, (1,1))
         else: 
-            return self.act(state, mode="evaluate")  # otherwise, choose the best action based on policy
+            return self.act(state, deterministic=True)  # otherwise, choose the best action based on policy
 
 
 class PRL(RL):
@@ -206,7 +199,6 @@ class PRL(RL):
             return 2*(a-0.5)*self.max_action # limitation: maximum action expansion is consistent across all dimensions, e.g. (-2,2)
         else:
             return a
-          
 
 # if __name__ == "__main__":
 #     env = gym.make('CartPole-v1', render_mode="rgb_array")

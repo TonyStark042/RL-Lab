@@ -20,11 +20,40 @@ class ReplayBuffer(object):
             batch = random.sample(self.buffer, batch_size)
             return zip(*batch)
         
-    def sample_all(self):
-        return zip(*self.buffer)
+    def sample_all(self, clear:bool = True):
+        if clear:
+            batch = self.buffer.copy()
+            self.clear()
+        else:
+            batch = self.buffer
+        return zip(*batch)
 
     def clear(self):
         self.buffer.clear()
 
     def __len__(self):
         return len(self.buffer)
+
+class HorizonBuffer(ReplayBuffer):
+    def __init__(self, horizon, capacity:int=10000) -> None:
+        super().__init__(capacity)
+        self.horizon = horizon
+
+    def is_ready(self, **kwargs):
+        timestep = kwargs.get("timestep", None)
+        if timestep % self.horizon == 0 and len(self.buffer) > 0:
+            return True
+        else:
+            return False
+
+class EpisodeBuffer(ReplayBuffer):
+    def __init__(self, capacity:int=10000) -> None:
+        super().__init__(capacity)
+
+    def is_ready(self, **kwargs):
+        done = kwargs.get("done", None)
+        if done:
+            return True
+        else:
+            return False
+        

@@ -1,9 +1,9 @@
-env_name: CliffWalking-v0
+env_name: CliffWalking-v0  # only support discrete observation space environments
 alg_name: Q_Learning
-train_mode: episode
 max_epochs: 1000
 max_episode_steps: 300
 epsilon_decay_flag: True
 lr: 0.3
-# timestep_freq: 50
+episode_eval_freq: 1
+# eval_freq: 50
 # max_timesteps: 10000

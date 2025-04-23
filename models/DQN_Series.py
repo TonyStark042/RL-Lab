@@ -1,19 +1,15 @@
-import time
 from typing import Literal
-from core.module import VRL
+from core.baseModule import VRL
 from core.net import Q_net, Dueling_Q_net
 from torch import optim
 import torch
 import numpy as np
 from torch import nn
-import gymnasium as gym
-from argparse import ArgumentParser
 from core.args import VRLArgs
 from core.buffer import ReplayBuffer
-import os
+from core.rollout import OffPolicy
 
-
-class DQN(VRL):
+class DQN(OffPolicy):
     def __init__(self, env, args:VRLArgs=None):
         super().__init__(env, args=args, model_names=["policy_net"],)
         if "Dueling" in self.alg_name:
@@ -27,68 +23,25 @@ class DQN(VRL):
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr) # only policy_net need optimizer
     
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
-    def act(self, state, mode:Literal["train", "evaluate", "test"]="train"):
-        if mode == "train":
+    def act(self, state, deterministic=False):
+        if deterministic:
             if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
-                action = self.policy_net(state).argmax()
+                action = self.policy_net(state).argmax().cpu().numpy()
             else:
                 action = self.epsilon_greedy(state)
         else:
             state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
-            action = self.policy_net(state).argmax()
-        return action.cpu().numpy()
-
-    def train(self):
-        start = time.time()
-        reach_maxTimestep = False
-        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
-            rewards = []
-            s = self.env.reset()[0]
-            while True:
-                a = self.act(s)
-                next_s, reward, terminated, truncated, info = self.env.step(a)
-                self.timestep += 1
-                rewards.append(reward)
-                self.memory.add((s, a, reward, next_s, terminated)) 
-                s = next_s
-                loss = self._update()
-                if self.timestep % self.sync_freq == 0:
-                    self.target_net.load_state_dict(self.policy_net.state_dict())
-
-                if self.train_mode == "timestep":
-                    if self.noise:
-                        early_stop = self.monitor.timestep_report(loss=loss) 
-                    else:
-                        early_stop = self.monitor.timestep_report(loss=loss, epsilon=self.epsilon)
-                    reach_maxTimestep = self.timestep >= self.max_timesteps
-                    if early_stop or reach_maxTimestep:
-                        break 
-        
-                if terminated or truncated:
-                    self.epoch_record.append(sum(rewards))
-                    break
-            
-            self.epoch += 1
-            if self.noise:
-                self.policy_net.reset_noise()
-                self.target_net.reset_noise()
-                if self.train_mode == "episode":
-                    early_stop = self.monitor.epoch_report(loss=loss, weight_epsilon=self.policy_net.fc2.weight_epsilon.mean().item(), bias_epioslon=self.policy_net.fc2.bias_epsilon.mean().item())
-            else:
-                if self.train_mode == "episode":
-                    early_stop = self.monitor.epoch_report(loss=loss, epsilon=self.epsilon)
-            
-            if early_stop or reach_maxTimestep:
-                break
-        end = time.time()
-        self.training_time += (end - start)
+            action = self.policy_net(state).argmax().cpu().numpy()
+        return action
 
     def _update(self):
         if len(self.memory) < self.batch_size:
-            return 0.0
+            batch_size = len(self.memory)
+        else:
+            batch_size = self.batch_size
         
-        states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
+        states, actions, rewards, next_states, dones = self.memory.sample(batch_size)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float).view(self.batch_size, -1)
         actions = torch.tensor(np.array(actions), device=self.device).view(self.batch_size, -1)
         rewards = torch.tensor(rewards, device=self.device, dtype=torch.float)  
@@ -109,4 +62,12 @@ class DQN(VRL):
         loss.backward()
         self.optimizer.step()
 
-        return loss.item()
+        return self.report_item(loss=loss.item())
+
+    def report_item(self, **kwargs):
+        report_dict = kwargs
+        if self.noise:
+            return report_dict
+        else:
+            report_dict["epsilon"] = self.epsilon
+            return report_dict

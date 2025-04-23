@@ -1,18 +1,15 @@
-import time
-from typing import Literal
-import gymnasium as gym
 import torch
-from core.module import RL
+from core.baseModule import RL
 from core.buffer import ReplayBuffer
-from core.args import PRLArgs
 from core.net import Critic_Qnet, Determin_PolicyNet
 from torch import nn
 import numpy as np
+from core.rollout import OffPolicy
 
-class DDPG(RL):
+class DDPG(OffPolicy):
     def __init__(self, env, args):
         super().__init__(env=env, args=args, model_names=["actor", "critic"],)
-        self.buffer = ReplayBuffer()
+        self.memory = ReplayBuffer()
         self.noise = OUNoise(env.action_space, decay_period=self.max_timesteps) if self.noise_type == "OU" else GaussianNoise(env.action_space)
         self.actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
         self.critic = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
@@ -23,60 +20,18 @@ class DDPG(RL):
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), self.actor_lr)
         self.critic_optimizer =  torch.optim.Adam(self.critic.parameters(), self.critic_lr)                                                  
     
-    def act(self, state, mode: Literal["train", "evaluate", "test"] = "train"): 
+    def act(self, state, deterministic=True): 
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
         action = self.actor(state).squeeze().detach().cpu().numpy()
-        # if mode != "test":
-        #     action = self.noise.get_action(action, self.timestep)
         return action
 
-    def train(self):
-        start = time.time()
-        reach_maxTimestep = False
-        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
-            cur_s = self.env.reset()[0]
-            rewards = []
-            while True:
-                a = self.act(cur_s)
-                next_s, reward, terminated, truncated, info = self.env.step(a.squeeze())
-
-                trainsition = (cur_s, next_s, a, reward, terminated or truncated)
-                self.buffer.add(trainsition)
-                rewards.append(reward)
-
-                cur_s = next_s
-                self.timestep += 1
-
-                actor_Qvalue, critic_loss = self._update()
-                # if self.timestep % self.sync_freq == 0:
-                #     self.trg_actor.load_state_dict(self.actor.state_dict())
-                #     self.trg_critic.load_state_dict(self.critic.state_dict())
-                
-                if self.train_mode == "timestep":
-                    early_stop = self.monitor.timestep_report(actor_Qvalue=actor_Qvalue, critic_loss=critic_loss)
-                    reach_maxTimestep = self.timestep >= self.max_timesteps
-                    if early_stop or reach_maxTimestep:
-                        break
-
-                if terminated or truncated:
-                    self.epoch_record.append(sum(rewards))
-                    break
-            
-            self.epoch += 1
-            if self.train_mode == "episode":
-                early_stop = self.monitor.epoch_report(actor_Qvalue=actor_Qvalue, critic_loss=critic_loss)
-
-            if early_stop or reach_maxTimestep:
-                break
-        end = time.time()
-        self.training_time += (end - start)
-
     def _update(self):
-        if len(self.buffer) < self.batch_size:
-            return 0.0, 0.0
+        if len(self.memory) < self.batch_size:
+            batch_size = len(self.memory)
+        else:
+            batch_size = self.batch_size
         
-        batch = self.buffer.sample(self.batch_size)
-        state, next_state, action, reward, done = batch
+        state, action, reward, next_state, done = self.memory.sample(batch_size)
         state = torch.FloatTensor(np.array(state)).to(self.device)
         next_state = torch.FloatTensor(np.array(next_state)).to(self.device)
         action = torch.FloatTensor(np.array(action)).to(self.device)
@@ -106,7 +61,7 @@ class DDPG(RL):
         for param, target_param in zip(self.actor.parameters(), self.trg_actor.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return actor_loss.item(), critic_loss.item()
+        return {"actor_Qvalue": actor_loss.item(), "critic_loss": critic_loss.item()}
 
 class OUNoise(object):
     '''

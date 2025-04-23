@@ -1,5 +1,4 @@
 env_name: HalfCheetah-v5 
-train_mode: timestep
 max_timesteps: 1000000
 h_size: 128
 actor_lr: 0.0003

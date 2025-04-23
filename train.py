@@ -13,7 +13,9 @@ def main():
     agent = MODEL_CLASS(env, args)
     agent.train()
     agent.save()
-    agent.monitor.learning_curve(mode=agent.train_mode)
+    agent.monitor.learning_curve(mode="timestep")
+    if agent.episode_eval_freq is not None:
+        agent.monitor.learning_curve(mode="episode")
 
 if __name__ == "__main__":
     main()

@@ -1,21 +1,18 @@
-import os
-import time
 from typing import Literal
-import gymnasium as gym
 import torch
-from torch.distributions import Categorical,MultivariateNormal      
-from core.module import PRL, PRLArgs
-from core.buffer import ReplayBuffer
+from core.baseModule import PRL, PRLArgs
+from core.buffer import HorizonBuffer
 from core.args import PRLArgs
 from core.net import ActorCritic
 from torch import nn
 import numpy as np
 from utils import normalize
+from core.rollout import OnPolicy
 
-class PPO(PRL):
+class PPO(OnPolicy):
     def __init__(self, env, args: PRLArgs):
         super().__init__(env=env, args=args, model_names=["act_policy"],)
-        self.buffer = ReplayBuffer()
+        self.buffer = HorizonBuffer(horizon=self.horizon)
         action_shape = self.action_dim if self.has_continuous_action_space else self.action_num
         self.trg_policy = ActorCritic(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.trg_policy.actor.parameters(), self.actor_lr)
@@ -27,63 +24,22 @@ class PPO(PRL):
         self.criterion = nn.MSELoss()
 
     @torch.no_grad()
-    def act(self, state, mode: Literal["train", "evaluate", "test"] = "train"): 
+    def act(self, state, deterministic=False): 
         state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
         dist = self.act_policy.actor(state)
-        if mode == "train" or mode == "evaluate":
-            action = dist.sample()
-        else:
+        if deterministic:
             if self.has_continuous_action_space:
                 action = dist.mean
             else:
                 action = dist.probs.argmax(dim=-1)
+        else:
+            action = dist.sample()
         return action.cpu().numpy()
-
-    def train(self):
-        start = time.time()
-        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
-            cur_s = self.env.reset()[0]
-            rewards = []
-            while True:
-                a = self.act(cur_s)
-                next_s, reward, terminated, truncated, info = self.env.step(a.squeeze())
-                if self.is_gae:
-                    trainsition = (cur_s, next_s, a, reward, terminated or truncated)
-                else:
-                    trainsition = (cur_s, None, a, reward, terminated or truncated)
-                self.buffer.add(trainsition)
-
-                cur_s = next_s
-                self.timestep += 1
-                rewards.append(reward)
-                
-                if self.timestep % self.horizon == 0 and len(self.buffer) > 0:
-                    self._update()
-                
-                if self.train_mode == "timestep":
-                    early_stop = self.monitor.timestep_report()
-                    reach_maxTimestep = self.timestep >= self.max_timesteps
-                    if early_stop or reach_maxTimestep:
-                        break  # exit inner loop first
-
-                if terminated or truncated:
-                    self.epoch_record.append(sum(rewards))
-                    break
-            
-            self.epoch += 1
-            if self.train_mode == "episode":
-                early_stop = self.monitor.epoch_report()
-                reach_maxTimestep = False
-
-            if early_stop or reach_maxTimestep:
-                break
-        end = time.time()
-        self.training_time += (end - start)
     
     def _update(self, shuffle=True):
         self.entropy_coef *= self.entropy_decay
 
-        old_states, old_next_states, old_actions, rewards, is_terminals = self.buffer.sample_all()
+        old_states, old_actions, rewards, old_next_states, is_terminals = self.buffer.sample_all(clear=True)
         old_states = torch.tensor(np.array(old_states), device=self.device, dtype=torch.float)
         # old_states = normalize(old_states)
         old_actions = torch.tensor(np.array(old_actions), device=self.device)
@@ -164,7 +120,5 @@ class PPO(PRL):
                 self.critic_optimizer.step()
             
         self.act_policy.load_state_dict(self.trg_policy.state_dict())
-        self.buffer.clear()
-
         return actor_loss.item(), critic_loss.item()
     

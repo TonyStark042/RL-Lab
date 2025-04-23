@@ -16,7 +16,6 @@ parser.add_argument('--alg_name', type=str, help=f"Algorithm name, support {allM
 parser.add_argument('--config', type=str, required=False, help='Path to the recipe file')
 ## Common arguments for all classes ##
 parser.add_argument('--mode', type=str, choices=["train", "test"], help="If test, will automatically use the parameter in results/ to run.")
-parser.add_argument('--train_mode', type=str, choices=["episode", "timestep"])
 parser.add_argument('--max_epochs', type=float, help='Maximum number of epochs')
 parser.add_argument('--max_timesteps', type=float, help='Maximum number of timesteps')
 parser.add_argument('--reward_threshold', type=float, help='Reward threshold for early stopping')
@@ -26,13 +25,15 @@ parser.add_argument('--gamma', type=float, help='Discount factor')
 parser.add_argument('--lr', type=float, help='Optimizer learning rate')
 parser.add_argument('--h_size', type=int, help='Hidden layer size')
 parser.add_argument('--window_size', type=int, help='Window size for running average')
-parser.add_argument('--timestep_freq', type=int, help='Every N timesteps, evaluate the model and then record')
-parser.add_argument('--report_freq', type=int, help='Reporting frequency')
+parser.add_argument('--eval_freq', type=int, help='Every N timesteps, evaluate the model and then record')
+parser.add_argument('--episode_eval_freq', type=int, help='If set, the evaluation will be done every N episodes, for providing view of episode learning curve')
+parser.add_argument('--report_freq', type=int, help='Reporting frequency of the evluation result, only take effect when greater than eval_freq')
 parser.add_argument('--max_episode_steps', type=int, help='Maximum episode steps')
-parser.add_argument('--eval_epochs', type=int, help='Maximum episode steps')
+parser.add_argument('--eval_epochs', type=int, help='Number of evaluation epochs')
 parser.add_argument('--batch_size', type=int, help='Batch size')
 parser.add_argument('--norm_obs', action="store_true", help='Normalize observation')
 parser.add_argument('--norm_reward', action="store_true", help='Normalize reward')
+
 ## VRL-specific arguments ##
 parser.add_argument('--epsilon_start', type=float, help='Starting epsilon value')
 parser.add_argument('--epsilon_end', type=float, help='Final epsilon value')
@@ -63,7 +64,6 @@ class BasicArgs:
     env_name:str = ""
     alg_name:str = ""
     mode:str = "train"
-    train_mode:str = "timestep"
     max_epochs:float = np.inf
     max_timesteps:float = np.inf
     reward_threshold:float = None
@@ -72,7 +72,8 @@ class BasicArgs:
     gamma:float = 0.99
     h_size:int = 64
     window_size:int = 10
-    timestep_freq:int = 100
+    eval_freq:int = 100
+    episode_eval_freq:int = None
     report_freq:int = 100
     max_episode_steps:int = None
     eval_epochs:int = 10
@@ -130,7 +131,7 @@ class A2CArgs(PRLArgs):
     critic_lr:float = 2e-4
     entropy_coef:float = 1e-3
     horizon:int = 128
-    is_gae:bool = True
+    is_gae:bool = False
     lmbda:float = 0.95
     batch_size:int = 64
 
@@ -149,7 +150,9 @@ class DQNArgs(VRLArgs):
     std_init:float = 0.5
 
 @dataclass(kw_only=True, frozen=False)
-class DDPGArgs(A2CArgs):
+class DDPGArgs(BasicArgs):
+    actor_lr:float = 3e-4
+    critic_lr:float = 2e-4
     memory_size:int = 10000
     batch_size:int = 256
     noise_type:str = "Gaussian"

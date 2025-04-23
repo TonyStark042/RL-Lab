@@ -131,8 +131,8 @@ class Comparator:
             plt.xlabel('timesteps')
 
         for index, (name, agent) in enumerate(self.agents.items()):
-            X = agent.timestep_record['timesteps']
-            Y_arrays = np.array(agent.timestep_record['rewards'])
+            X = agent.timestep_eval['timesteps']
+            Y_arrays = np.array(agent.timestep_eval['rewards'])
             color = colors[index]
 
             moving_avg = []
