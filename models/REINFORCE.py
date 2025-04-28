@@ -17,7 +17,7 @@ class REINFORCE(OnPolicy):
         self.buffer = EpisodeBuffer(capacity=self.max_episode_steps)
     
     def act(self, state, deterministic=False):
-        state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+        state = torch.from_numpy(state).float().reshape(-1, self.state_dim).to(self.device)
         dist = self.policy_net(state)
         if deterministic:
             action = dist.probs.argmax(dim=-1)
@@ -28,7 +28,7 @@ class REINFORCE(OnPolicy):
     def _update(self):
         policy_reward = torch.tensor(0.0).to(self.device)
 
-        states, actions, rewards, _, _ = self.buffer.sample_all(clear=True)
+        states, actions, rewards, _, _ = self._sample_all(clear=True)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
         actions = torch.tensor(np.array(actions), device=self.device)
         log_probs = self.policy_net(states).log_prob(actions.squeeze())
@@ -46,3 +46,5 @@ class REINFORCE(OnPolicy):
         self.optimizer.zero_grad()
         policy_reward.backward()
         self.optimizer.step()
+
+        return {"Expecred reward": policy_reward.item()}

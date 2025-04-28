@@ -29,11 +29,11 @@ class RLMonitor:
                     model = getattr(self.agent, net_name)
                     self.agent.best[net_name] = model
 
-            if self.agent.timestep % self.agent.report_freq == 0:
-                message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
-                for k,v in report_dict.items():
-                    message += f"| {k}: {v:.3f}"
-                self.agent.logger.info(message)
+            # if self.agent.timestep % self.agent.report_freq == 0:
+            message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
+            for k,v in report_dict.items():
+                message += f"| {k}: {v:.3f}"
+            self.agent.logger.info(message)
         
             if self.agent.early_stop:
                 if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
@@ -53,7 +53,7 @@ class RLMonitor:
         """
         Plot and save the learning curve with optional moving average and visualization, showing the evaluation reward, instead of training reward, the std looks low beacause uses moving average std.
         """
-        result_path = self._check_dir()
+        save_dir = self._check_dir()
         plt.figure(figsize=(10, 6))
         if hasattr(self.agent, 'reward_threshold') and self.agent.reward_threshold not in (None, np.inf):
             plt.axhline(y=self.agent.reward_threshold, color='r', linestyle='--', label='Reward Threshold')
@@ -94,7 +94,7 @@ class RLMonitor:
         plt.plot(X, moving_avg, color='blue', label=f'Moving Average (n={self.agent.window_size})')
         plt.fill_between(X, moving_avg - moving_std, moving_avg + moving_std, color='blue', alpha=0.2)
         
-        save_path = os.path.join(result_path, f"{name}.png")
+        save_path = os.path.join(save_dir, f"{name}.png")
         plt.grid(True, alpha=0.3)
         plt.title(self.agent.env_name)
         plt.legend()
@@ -105,10 +105,10 @@ class RLMonitor:
         """
         Check if there is the model's saving directory.
         """
-        result_path = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}")
-        if not os.path.exists(result_path):
-            os.makedirs(result_path, exist_ok=True)
-        return result_path
+        save_dir = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}")
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=True)
+        return save_dir
 
     def _check_args(self):
         """

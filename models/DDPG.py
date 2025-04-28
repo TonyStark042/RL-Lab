@@ -21,7 +21,7 @@ class DDPG(OffPolicy):
         self.critic_optimizer =  torch.optim.Adam(self.critic.parameters(), self.critic_lr)                                                  
     
     def act(self, state, deterministic=True): 
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
+        state = torch.FloatTensor(state).to(self.device).reshape(-1, self.state_dim)
         action = self.actor(state).squeeze().detach().cpu().numpy()
         return action
 

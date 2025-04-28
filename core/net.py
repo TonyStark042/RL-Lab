@@ -119,16 +119,17 @@ class Policy_net(nn.Module):
         if has_continuous_action_space:
             self.logstd = nn.Parameter(torch.zeros(action_dim))
             self.mu = nn.Linear(h_size*2, action_dim)
-            self.mu.weight.data.mul_(0.1)
-            self.mu.bias.data.mul_(0.0)
+            # self.mu.weight.data.mul_(0.1)
+            # self.mu.bias.data.mul_(0.0)
         else:
             self.fc3 = nn.Linear(h_size*2, action_dim)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        # x = F.relu(self.fc1(x))
+        # x = F.relu(self.fc2(x))
+        x = F.tanh(self.fc1(x))
+        x = F.tanh(self.fc2(x))        
         if self.has_continuous_action_space:
-            # mu = F.sigmoid(self.mu(x)).squeeze()
             mu = self.mu(x).squeeze()
             logstd = self.logstd.expand_as(mu)
             std = torch.exp(logstd)

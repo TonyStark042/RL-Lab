@@ -1,5 +1,6 @@
 from collections import deque
 import random
+import numpy as np
 
 class ReplayBuffer(object):
     def __init__(self, capacity:int=10000) -> None:
@@ -15,10 +16,10 @@ class ReplayBuffer(object):
         if sequential:
             rand = random.randint(0, len(self.buffer) - batch_size)
             batch = [self.buffer[i] for i in range(rand, rand + batch_size)]
-            return zip(*batch)
         else:
             batch = random.sample(self.buffer, batch_size)
-            return zip(*batch)
+        batch = map(np.array, list(zip(*batch)))
+        return batch
         
     def sample_all(self, clear:bool = True):
         if clear:
@@ -26,7 +27,8 @@ class ReplayBuffer(object):
             self.clear()
         else:
             batch = self.buffer
-        return zip(*batch)
+        batch = map(np.array, list(zip(*batch)))
+        return batch
 
     def clear(self):
         self.buffer.clear()

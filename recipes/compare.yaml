@@ -17,7 +17,7 @@ PPO:
   eps_clip: 0.2
   gamma: 0.99
   is_gae: true
-  lmbda: 0.95
+  gae_lambda: 0.95
   horizon: 100
   update_times: 5
 REINFORCE:
@@ -29,6 +29,6 @@ A2C:
   baseline: 0
   h_size: 64
   gamma: 0.99
-  lmbda: 0.95
+  gae_lambda: 0.95
   actor_lr: 0.0005
   critic_lr: 0.0002

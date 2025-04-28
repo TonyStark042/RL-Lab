@@ -1,12 +1,14 @@
-env_name: CartPole-v1 # HalfCheetah-v5  # CartPole-v1
+env_name: HalfCheetah-v5 # HalfCheetah-v5  # CartPole-v1
 max_timesteps: 1000000
 # max_epochs: 1000
-is_gae: True
 h_size: 128
 actor_lr: 0.0003
 critic_lr: 0.0002
-batch_size: 128 # 256
-horizon: 256 # 2048
+batch_size: 256 # 256 128
+horizon: 2048 # 2048 256
 update_times: 10
-# norm_obs: True
-# norm_reward: True
+norm_obs: True
+norm_reward: False
+norm_advantage: True
+target_kl: 0.05 # 0.01
+eval_freq: 1000

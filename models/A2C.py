@@ -17,7 +17,7 @@ class A2C(OnPolicy):
         self.buffer = HorizonBuffer(horizon=self.horizon)
 
     def act(self, state, deterministic=False):
-        state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
+        state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
         dist = self.model.actor(state)
         if deterministic:
             if self.has_continuous_action_space:
@@ -29,9 +29,9 @@ class A2C(OnPolicy):
         return action.detach().cpu().numpy()
 
     def _update(self):
-        states, actions, rewards, _, dones = self.buffer.sample_all(clear=True)
-        states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
-        actions = torch.tensor(np.array(actions), device=self.device)
+        states, actions, rewards, _, dones = self._sample_all(clear=True)
+        states = torch.tensor(states, device=self.device, dtype=torch.float)
+        actions = torch.tensor(actions, device=self.device)
         dists = self.model.actor(states)
         log_probs = dists.log_prob(actions.squeeze()).reshape(-1, self.action_dim).sum(-1, keepdim=True)
         entropys = dists.entropy().reshape(-1, 1)
@@ -58,4 +58,4 @@ class A2C(OnPolicy):
 
         self.buffer.clear()
 
-        return loss.item(), actor_loss.item(), critic_loss.item()
+        return {"loss":loss.item(), "actor_loss": actor_loss.item(), "critic_loss": critic_loss.item()}  

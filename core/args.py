@@ -27,7 +27,7 @@ parser.add_argument('--h_size', type=int, help='Hidden layer size')
 parser.add_argument('--window_size', type=int, help='Window size for running average')
 parser.add_argument('--eval_freq', type=int, help='Every N timesteps, evaluate the model and then record')
 parser.add_argument('--episode_eval_freq', type=int, help='If set, the evaluation will be done every N episodes, for providing view of episode learning curve')
-parser.add_argument('--report_freq', type=int, help='Reporting frequency of the evluation result, only take effect when greater than eval_freq')
+# parser.add_argument('--report_freq', type=int, help='Reporting frequency of the evluation result, only take effect when greater than eval_freq')
 parser.add_argument('--max_episode_steps', type=int, help='Maximum episode steps')
 parser.add_argument('--eval_epochs', type=int, help='Number of evaluation epochs')
 parser.add_argument('--batch_size', type=int, help='Batch size')
@@ -44,8 +44,8 @@ parser.add_argument('--memory_size', type=int, help='Replay memory size')
 ## DQN-specific arguments ##
 parser.add_argument('--std_init', type=float, help='Initial standard deviation for NoisyDQN')
 ## PRL-specific arguments ##
-parser.add_argument('--is_gae', action='store_true', help='Use Generalized Advantage Estimation')
-parser.add_argument('--lmbda', type=float, help='Lambda parameter for GAE')
+parser.add_argument('--gae_lambda', type=float, help='Lambda parameter for GAE, 1 is equivalent to classic advantage')
+parser.add_argument('--norm_advantage', action="store_true", help='Normalize advantages')
 ## A2C-specific arguments ##
 parser.add_argument('--actor_lr', type=float, help='Actor learning rate')
 parser.add_argument('--critic_lr', type=float, help='Critic learning rate')
@@ -55,6 +55,7 @@ parser.add_argument('--horizon', type=int, help='Update every N steps')
 parser.add_argument('--update_times', type=int, help='Update times in one updating')
 parser.add_argument('--eps_clip', type=float, help='Clip for PPO')
 parser.add_argument('--entropy_decay', type=float, help='Decay rate of entropy_coef')
+parser.add_argument('--target_kl', type=float, help='Target KL divergence for early stopping')   
 ## DDPG-specific arguments ##
 parser.add_argument('--noise_type', type=str, choices=["Gaussian", "OU"], help='Noise type for exploration')
 
@@ -74,7 +75,7 @@ class BasicArgs:
     window_size:int = 10
     eval_freq:int = 100
     episode_eval_freq:int = None
-    report_freq:int = 100
+    # report_freq:int = 100
     max_episode_steps:int = None
     eval_epochs:int = 10
     norm_obs:bool = False
@@ -119,7 +120,7 @@ class VRLArgs(BasicArgs):
 
 @dataclass(kw_only=True, frozen=False)
 class PRLArgs(BasicArgs):
-    pass
+    norm_advantage:bool = False
 
 @dataclass(kw_only=True, frozen=False)
 class REINFORCEArgs(BasicArgs):
@@ -131,8 +132,7 @@ class A2CArgs(PRLArgs):
     critic_lr:float = 2e-4
     entropy_coef:float = 1e-3
     horizon:int = 128
-    is_gae:bool = False
-    lmbda:float = 0.95
+    gae_lambda:float = 0.95
     batch_size:int = 64
 
 @dataclass(kw_only=True, frozen=False)
@@ -140,6 +140,7 @@ class PPOArgs(A2CArgs):
     update_times:int = 10
     eps_clip:float = 0.2
     entropy_decay:float = 0.99
+    target_kl:float = None
 
 @dataclass(kw_only=True, frozen=False)
 class DQNArgs(VRLArgs):

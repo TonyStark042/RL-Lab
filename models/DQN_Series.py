@@ -19,29 +19,24 @@ class DQN(OffPolicy):
             self.policy_net = Q_net(self.state_dim, self.action_num, self.h_size, self.noise).to(self.device)
             self.target_net = Q_net(self.state_dim, self.action_num, self.h_size, self.noise).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        self.memory = ReplayBuffer(self.memory_size)
+        self.buffer = ReplayBuffer(self.memory_size)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr) # only policy_net need optimizer
     
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
     def act(self, state, deterministic=False):
         if deterministic:
             if self.noise:
-                state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
+                state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
                 action = self.policy_net(state).argmax().cpu().numpy()
             else:
                 action = self.epsilon_greedy(state)
         else:
-            state = torch.tensor(state, device=self.device, dtype=torch.float).unsqueeze(0)
+            state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
             action = self.policy_net(state).argmax().cpu().numpy()
         return action
 
     def _update(self):
-        if len(self.memory) < self.batch_size:
-            batch_size = len(self.memory)
-        else:
-            batch_size = self.batch_size
-        
-        states, actions, rewards, next_states, dones = self.memory.sample(batch_size)
+        states, actions, rewards, next_states, dones = self._sample(self.batch_size)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float).view(self.batch_size, -1)
         actions = torch.tensor(np.array(actions), device=self.device).view(self.batch_size, -1)
         rewards = torch.tensor(rewards, device=self.device, dtype=torch.float)  

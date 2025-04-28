@@ -10,10 +10,7 @@ from core import noDeepLearning
 import copy
 import logging
 import yaml
-import time
-
-
-
+from utils import Normalizer
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -38,12 +35,9 @@ class RL(ABC):
         self.logger = logging.getLogger(name=self.alg_name)
         self.monitor = RLMonitor(self)
         self.monitor._check_args()
-        # record above arguments, must be after checking, the reward_threshold will be reset
+        ## record above arguments, must be after checking because the reward_threshold will be reset ##
         self.args = self.__dict__.copy()
         ## env related attributes ##
-        # if self.norm_obs or self.norm_reward:
-        #     self.env = DummyVecEnv([lambda: self.env])
-        #     self.env = VecNormalize(self.env, norm_obs=self.norm_obs, norm_reward=self.norm_reward, clip_obs=10.)
         self.eval_env = copy.deepcopy(self.env)
         self.action_space = self.env.action_space  # high and low are only available in continuous action space
         self.action_dim =  self.action_space.shape[0] if self.has_continuous_action_space else 1
@@ -52,7 +46,17 @@ class RL(ABC):
         self.state_dim = self.state_space.shape[0] if len(self.state_space.shape) != 0 else 1
         self.state_num = self.state_space.n if hasattr(self.state_space, "n") else np.inf
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        ## state and reward normalizer ##
+        if self.norm_obs:
+            if hasattr(self, "stateNormalizer"):
+                self.state_normalizer = Normalizer.loading_normalizer(**self.stateNormalizer)
+            else:
+                self.state_normalizer = Normalizer.init_normalizer(self.env, mode="state", epochs=100)
+        if self.norm_reward:
+            if hasattr(self, "rewardNormalizer"):
+                self.reward_normalizer = Normalizer.loading_normalizer(**self.rewardNormalizer)
+            else:
+                self.reward_normalizer = Normalizer.init_normalizer(self.env, mode="reward", epochs=100)
         ## recoding arguments, variable ## 
         self.timestep = 0
         self.epoch = 0
@@ -90,7 +94,10 @@ class RL(ABC):
             epoch_reward = 0
             s = self.eval_env.reset()[0]
             while True:
-                a = self.act(s, deterministic=True)
+                if self.norm_obs:
+                    a = self.act(self.state_normalizer(s), deterministic=True)
+                else:
+                    a = self.act(s, deterministic=True)
                 s, reward, terminated, truncated, info = self.eval_env.step(a.squeeze())
                 epoch_reward += reward
                 if terminated or truncated:
@@ -103,20 +110,19 @@ class RL(ABC):
         """
         Test the model's performence.
         """
-        result_dir = self.monitor._check_dir()
+        save_dir = self.monitor._check_dir()
         
         if self.alg_name in noDeepLearning:
-            para = os.path.join(result_dir, "Q_table.npy")
+            para = os.path.join(save_dir, "Q_table.npy")
             self.Q = np.load(para, allow_pickle=True)
         else:
-            para = os.path.join(result_dir, "weight.pth")
+            para = os.path.join(save_dir, "weight.pth")
             models_dict = torch.load(para)
             for net_name, state_dict in models_dict.items():
                 model = getattr(self, net_name)
                 model.load_state_dict(state_dict)
-        self.logger.info(f"Loading model from {para}")
-
-        rewards = self.evaluate(mode="test")
+        self.logger.info(f"Loading model from {para}")     
+        rewards = self.evaluate(deterministic=True)
         self.logger.info(f"{self.alg_name} in {self.env_name}, Average {self.eval_epochs} reward {np.mean(rewards):.3f}, Standard deviation {np.std(rewards):.3f}")
 
     def save(self, best=True):
@@ -126,8 +132,6 @@ class RL(ABC):
             model_names (str): The name of the model attribute to save. Defaults to 'policy_net';
             best (str): Whether to save the history best model, or will save the last episode's model if set to False
         """
-        result_path = self.monitor._check_dir()        
-
         running_para = self.args
         running_para.pop("monitor")
         running_para.pop("logger")
@@ -135,24 +139,44 @@ class RL(ABC):
         running_para.pop("env")
         running_para.pop("mode")
         running_para.pop("has_continuous_action_space")
+        if self.episode_eval_freq is None:
+            running_para.pop("episode_eval_freq")
+        if self.norm_obs:
+            running_para["stateNormalizer"] = self.state_normalizer.__dict__
+        if self.norm_reward:
+            running_para["rewardNormalizer"] = self.reward_normalizer.__dict__
 
-        with open(os.path.join(result_path, 'recipe.yaml'), 'w') as f:
+        save_dir = self.monitor._check_dir()
+        with open(os.path.join(save_dir, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)
 
-        save_dict = {}
-        if self.alg_name not in noDeepLearning:
-            for net_name in self.model_names:
-                if best:
-                    save_dict[net_name] = self.best[net_name].state_dict()
-                else:
-                    save_dict[net_name] = getattr(self, net_name).state_dict()
-            save_path = os.path.join(result_path, f"weight.pth")
-            torch.save(save_dict, save_path)
-            self.logger.info(f"Model {self.alg_name}'s {self.model_names} has been saved at {save_path}, best {best}")
-        else:
-            save_path = os.path.join(result_path, f"Q_table.npy")
-            np.save(save_path, self.Q)
+        def _save_model(self, save_dir, best=True):
+            save_dict = {}
+            if self.alg_name not in noDeepLearning:
+                for net_name in self.model_names:
+                    if best:
+                        save_dict[net_name] = self.best[net_name].state_dict()
+                    else:
+                        save_dict[net_name] = getattr(self, net_name).state_dict()
+                save_path = os.path.join(save_dir, f"weight.pth")
+                torch.save(save_dict, save_path)
+                self.logger.info(f"Model {self.alg_name}'s {self.model_names} has been saved at {save_path}, best {best}")
+            else:
+                save_path = os.path.join(save_dir, f"Q_table.npy")
+                np.save(save_path, self.Q)
 
+        _save_model(self, save_dir, best=best)
+
+    def _check_normalize(self, rewards, states, next_states):
+        if self.norm_obs:
+            states = self.state_normalizer.normalize(states)
+            next_states = self.state_normalizer.normalize(next_states)
+            all_states = np.concatenate([states, next_states], axis=0)
+            self.state_normalizer.update(all_states)
+        if self.norm_reward:
+            rewards = self.reward_normalizer.normalize(rewards) 
+            self.reward_normalizer.update(rewards)
+        return rewards, states, next_states
 
 class VRL(RL):
     def __init__(self, env, args= None, **kwargs):
@@ -188,7 +212,7 @@ class PRL(RL):
         advantages_list = []
         advantage = 0.0
         for delta, done in zip(td_delta[::-1], is_terninated[::-1]):
-            advantage = self.gamma * self.lmbda * advantage * done + delta
+            advantage = self.gamma * self.gae_lambda * advantage * (1 - done) + delta
             advantages_list.append(advantage)
         advantages_list.reverse()
         return torch.tensor(np.array(advantages_list), dtype=torch.float, device=self.device).unsqueeze(-1)
