@@ -18,7 +18,7 @@ class Q_Learning(VRL):
 
     def train(self):
         start = time.time()
-        while self.epoch < self.max_epochs and self.timestep < self.max_timesteps:
+        while self.episode < self.max_epochs and self.timestep < self.max_timesteps:
             cur_s, _ = self.env.reset()
             reach_maxTimestep = False
             epoch_reward = 0
@@ -46,7 +46,7 @@ class Q_Learning(VRL):
                 if done:
                     self.monitor.episode_evaluate()
                     self.epoch_record.append(epoch_reward)
-                    self.epoch += 1
+                    self.episode += 1
                     break
 
             if early_stop or reach_maxTimestep:

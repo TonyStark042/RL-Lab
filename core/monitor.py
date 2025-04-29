@@ -13,11 +13,12 @@ class RLMonitor:
         """
         evalute the model reward situation every self.agent.eval_freq in rencent <window_size> timestep, and save the best model, checking early stop
         """
-        if self.agent.timestep % self.agent.eval_freq == 0:
+        total_timestep = self.agent.timestep.sum().item()
+        if total_timestep % self.agent.eval_freq == 0:
             evaluate_reward = self.agent.evaluate()
             mean_evaluate_reward = np.mean(evaluate_reward)
             self.agent.timestep_eval["rewards"].append(evaluate_reward)
-            self.agent.timestep_eval["timesteps"].append(self.agent.timestep)
+            self.agent.timestep_eval["timesteps"].append(total_timestep)
             if len(self.agent.timestep_eval["rewards"]) <= self.agent.window_size:
                 avg_n_reward = np.mean(sum(self.agent.timestep_eval["rewards"]) / len(self.agent.timestep_eval["rewards"]))
             else:
@@ -30,24 +31,24 @@ class RLMonitor:
                     self.agent.best[net_name] = model
 
             # if self.agent.timestep % self.agent.report_freq == 0:
-            message = f"Timestep: {self.agent.timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
+            message = f"Timestep: {total_timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
             for k,v in report_dict.items():
                 message += f"| {k}: {v:.3f}"
             self.agent.logger.info(message)
         
             if self.agent.early_stop:
                 if avg_n_reward >= self.agent.reward_threshold and mean_evaluate_reward >= self.agent.reward_threshold:
-                    self.agent.logger.info(f"Converged at timestep: {self.agent.timestep}, final optimal reward: {mean_evaluate_reward: .3f}")
+                    self.agent.logger.info(f"Converged at timestep: {total_timestep}, final optimal reward: {mean_evaluate_reward: .3f}")
                     return True
             return False
         else:
             return False
     
     def episode_evaluate(self):
-        if self.agent.episode_eval_freq is not None and self.agent.epoch % self.agent.episode_eval_freq == 0:
+        if self.agent.episode_eval_freq is not None and (self.agent.episode.sum() / self.agent.num_envs) % self.agent.episode_eval_freq == 0:
             evaluate_reward = self.agent.evaluate()
             self.agent.episode_eval["rewards"].append(evaluate_reward)
-            self.agent.episode_eval["timesteps"].append(self.agent.epoch)
+            self.agent.episode_eval["timesteps"].append(self.agent.episode)
 
     def learning_curve(self, mode=Literal["episode", "timestep"]):
         """

@@ -34,7 +34,7 @@ class ReplayBuffer(object):
         self.buffer.clear()
 
     def __len__(self):
-        return len(self.buffer)
+        return len(self.buffer) * (self.buffer[0][0].shape[0] if self.buffer[0][0].ndim > 1 else 1)
 
 class HorizonBuffer(ReplayBuffer):
     def __init__(self, horizon, capacity:int=10000) -> None:

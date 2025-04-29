@@ -25,17 +25,19 @@ class DQN(OffPolicy):
     @torch.no_grad() # Based on Q value to select action, no need to calculate gradient
     def act(self, state, deterministic=False):
         if deterministic:
+            state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
+            action = self.policy_net(state).argmax(-1).cpu().numpy()
+        else:
             if self.noise:
                 state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
-                action = self.policy_net(state).argmax().cpu().numpy()
+                action = self.policy_net(state).argmax(-1).cpu().numpy()
             else:
                 action = self.epsilon_greedy(state)
-        else:
-            state = torch.tensor(state, device=self.device, dtype=torch.float).reshape(-1, self.state_dim)
-            action = self.policy_net(state).argmax().cpu().numpy()
         return action
 
     def _update(self):
+        if len(self.buffer) < self.batch_size:
+            return {}
         states, actions, rewards, next_states, dones = self._sample(self.batch_size)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float).view(self.batch_size, -1)
         actions = torch.tensor(np.array(actions), device=self.device).view(self.batch_size, -1)

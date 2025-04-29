@@ -10,5 +10,6 @@ memory_size: 5000
 eval_freq: 100
 std_init: 0.5
 batch_size: 32
+# num_envs: 4
 # norm_obs: True
 # norm_reward: True

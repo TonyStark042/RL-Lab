@@ -33,7 +33,7 @@ parser.add_argument('--eval_epochs', type=int, help='Number of evaluation epochs
 parser.add_argument('--batch_size', type=int, help='Batch size')
 parser.add_argument('--norm_obs', action="store_true", help='Normalize observation')
 parser.add_argument('--norm_reward', action="store_true", help='Normalize reward')
-
+parser.add_argument('--num_envs', type=int, help='Number of parallel environments used to rollout')
 ## VRL-specific arguments ##
 parser.add_argument('--epsilon_start', type=float, help='Starting epsilon value')
 parser.add_argument('--epsilon_end', type=float, help='Final epsilon value')
@@ -80,6 +80,7 @@ class BasicArgs:
     eval_epochs:int = 10
     norm_obs:bool = False
     norm_reward:bool = False
+    num_envs:int = 1
 
     def __post_init__(self):
         base_args, _ = parser.parse_known_args()

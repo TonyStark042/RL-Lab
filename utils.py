@@ -1,4 +1,4 @@
-import torch
+import gymnasium as gym
 import sys
 import numpy as np
 from typing import Literal
@@ -102,4 +102,10 @@ def get_name():
     else:
         raise ValueError("Algorithm name not found in command line arguments.")
     return alg_name
+
+def make_env(env_name, max_episode_steps=None):
+    def _init():
+        env = gym.make(env_name, render_mode="rgb_array", max_episode_steps=max_episode_steps)
+        return env
+    return _init  # must return a function
 

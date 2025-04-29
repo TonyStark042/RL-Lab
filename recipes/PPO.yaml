@@ -4,7 +4,7 @@ max_timesteps: 1000000
 h_size: 128
 actor_lr: 0.0003
 critic_lr: 0.0002
-batch_size: 256 # 256 128
+batch_size: 64 # 256 128 64
 horizon: 2048 # 2048 256
 update_times: 10
 norm_obs: True
@@ -12,3 +12,4 @@ norm_reward: False
 norm_advantage: True
 target_kl: 0.05 # 0.01
 eval_freq: 1000
+num_envs: 1

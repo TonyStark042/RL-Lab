@@ -1,4 +1,4 @@
-import gymnasium as gym
+from gymnasium.vector import AsyncVectorEnv
 import numpy as np
 import os
 import torch
@@ -10,7 +10,7 @@ from core import noDeepLearning
 import copy
 import logging
 import yaml
-from utils import Normalizer
+from utils import Normalizer, make_env
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
@@ -57,12 +57,16 @@ class RL(ABC):
                 self.reward_normalizer = Normalizer.loading_normalizer(**self.rewardNormalizer)
             else:
                 self.reward_normalizer = Normalizer.init_normalizer(self.env, mode="reward", epochs=100)
+        ## parallel env ##
+        if self.num_envs > 1:
+            self.env = AsyncVectorEnv([make_env(self.env_name, self.max_episode_steps) for _ in range(self.num_envs)])
+            self.logger.info(f"Creating {self.num_envs} parallel environments...")
         ## recoding arguments, variable ## 
-        self.timestep = 0
-        self.epoch = 0
+        self.timestep = np.zeros(self.num_envs, dtype=np.int32) 
+        self.episode = np.zeros(self.num_envs, dtype=np.int32)
         self.optimal_reward = -np.inf
         self.best = {}
-        self.epoch_record = []
+        self.episode_record = np.zeros(self.num_envs, dtype=np.float32)
         self.timestep_eval = {"timesteps": [], "rewards": []}
         if self.episode_eval_freq is not None:
             self.episode_eval = {"timesteps": [], "rewards": []}
@@ -85,7 +89,7 @@ class RL(ABC):
 
         self.timestep_eval['rewards'].append(rewards)
     
-    def evaluate(self, mode="evaluate"):
+    def evaluate(self):
         """
         Evaluate the model's performence in training process.
         """
@@ -106,11 +110,12 @@ class RL(ABC):
         rewards = np.array(results)
         return rewards
     
-    def test(self):
+    def test(self, save_dir=None):
         """
         Test the model's performence.
         """
-        save_dir = self.monitor._check_dir()
+        if save_dir is None:
+            save_dir = self.monitor._check_dir()
         
         if self.alg_name in noDeepLearning:
             para = os.path.join(save_dir, "Q_table.npy")
@@ -122,10 +127,10 @@ class RL(ABC):
                 model = getattr(self, net_name)
                 model.load_state_dict(state_dict)
         self.logger.info(f"Loading model from {para}")     
-        rewards = self.evaluate(deterministic=True)
+        rewards = self.evaluate()
         self.logger.info(f"{self.alg_name} in {self.env_name}, Average {self.eval_epochs} reward {np.mean(rewards):.3f}, Standard deviation {np.std(rewards):.3f}")
 
-    def save(self, best=True):
+    def save(self, best=True, save_dir=None):
         """
         Save the specified model's state dict.
         Args:
@@ -146,7 +151,8 @@ class RL(ABC):
         if self.norm_reward:
             running_para["rewardNormalizer"] = self.reward_normalizer.__dict__
 
-        save_dir = self.monitor._check_dir()
+        if save_dir is None:
+            save_dir = self.monitor._check_dir()
         with open(os.path.join(save_dir, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)
 
@@ -192,8 +198,11 @@ class VRL(RL):
         else:
             self.epsilon = self.epsilon_start  
 
-        if np.random.rand() < self.epsilon:             
-            return np.random.randint(self.action_dim + 1) # torch.randint(self.action_dim, (1,1))
+        actions = []
+
+        if np.random.rand() < self.epsilon:
+            state_num = state.reshape(-1, self.state_dim).shape[0]
+            return np.random.randint(self.action_num + 1, size=state_num) # torch.randint(self.action_dim, (1,1))
         else: 
             return self.act(state, deterministic=True)  # otherwise, choose the best action based on policy
 
