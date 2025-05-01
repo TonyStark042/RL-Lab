@@ -1,7 +1,7 @@
-env_name: HalfCheetah-v5 
+env_name: Pendulum-v1 # CartPole-v1 # Pendulum-v1 # HalfCheetah-v5 
 max_timesteps: 1000000
 h_size: 128
 actor_lr: 0.0003
 critic_lr: 0.0002
-sync_freq: 256
 batch_size: 256
+num_envs: 2

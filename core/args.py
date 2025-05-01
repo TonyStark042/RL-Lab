@@ -15,7 +15,6 @@ parser.add_argument('--env_name', type=str, help='Environment name')
 parser.add_argument('--alg_name', type=str, help=f"Algorithm name, support {allModels}, DQN_Series support any combination of {DQN_Series}+DQN")
 parser.add_argument('--config', type=str, required=False, help='Path to the recipe file')
 ## Common arguments for all classes ##
-parser.add_argument('--mode', type=str, choices=["train", "test"], help="If test, will automatically use the parameter in results/ to run.")
 parser.add_argument('--max_epochs', type=float, help='Maximum number of epochs')
 parser.add_argument('--max_timesteps', type=float, help='Maximum number of timesteps')
 parser.add_argument('--reward_threshold', type=float, help='Reward threshold for early stopping')
@@ -64,7 +63,6 @@ parser.add_argument('--noise_type', type=str, choices=["Gaussian", "OU"], help='
 class BasicArgs:
     env_name:str = ""
     alg_name:str = ""
-    mode:str = "train"
     max_epochs:float = np.inf
     max_timesteps:float = np.inf
     reward_threshold:float = None
@@ -83,6 +81,8 @@ class BasicArgs:
     num_envs:int = 1
 
     def __post_init__(self):
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return
         base_args, _ = parser.parse_known_args()
         if base_args.config:
             recipe_path = base_args.config
@@ -113,7 +113,7 @@ class BasicArgs:
 
 @dataclass(kw_only=True, frozen=False)
 class VRLArgs(BasicArgs):
-    epsilon_start:float = 1.0
+    epsilon_start: float = 1.0
     epsilon_end:float = 0.01
     epsilon_decay:float = 0.002
     epsilon_decay_flag:bool = True

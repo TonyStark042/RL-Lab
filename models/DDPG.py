@@ -9,7 +9,7 @@ from core.rollout import OffPolicy
 class DDPG(OffPolicy):
     def __init__(self, env, args):
         super().__init__(env=env, args=args, model_names=["actor", "critic"],)
-        self.memory = ReplayBuffer()
+        self.buffer = ReplayBuffer()
         self.noise = OUNoise(env.action_space, decay_period=self.max_timesteps) if self.noise_type == "OU" else GaussianNoise(env.action_space)
         self.actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
         self.critic = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
@@ -18,23 +18,21 @@ class DDPG(OffPolicy):
         self.trg_actor.load_state_dict(self.actor.state_dict())
         self.trg_critic.load_state_dict(self.critic.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), self.actor_lr)
-        self.critic_optimizer =  torch.optim.Adam(self.critic.parameters(), self.critic_lr)                                                  
+        self.critic_optimizer =  torch.optim.Adam(self.critic.parameters(), self.critic_lr)
     
+    @torch.no_grad()
     def act(self, state, deterministic=True): 
         state = torch.FloatTensor(state).to(self.device).reshape(-1, self.state_dim)
-        action = self.actor(state).squeeze().detach().cpu().numpy()
+        action = self.actor(state).cpu().numpy()
         return action
 
     def _update(self):
-        if len(self.memory) < self.batch_size:
-            batch_size = len(self.memory)
-        else:
-            batch_size = self.batch_size
-        
-        state, action, reward, next_state, done = self.memory.sample(batch_size)
-        state = torch.FloatTensor(np.array(state)).to(self.device)
-        next_state = torch.FloatTensor(np.array(next_state)).to(self.device)
-        action = torch.FloatTensor(np.array(action)).to(self.device)
+        if len(self.buffer) < self.batch_size:
+            return {}
+        state, action, reward, next_state, done = self._sample(self.batch_size)
+        state = torch.FloatTensor(state).to(self.device)
+        next_state = torch.FloatTensor(next_state).to(self.device)
+        action = torch.FloatTensor(action).to(self.device)
         reward = torch.FloatTensor(reward).to(self.device).unsqueeze(1)
         done = torch.FloatTensor(done).to(self.device).unsqueeze(1)
 

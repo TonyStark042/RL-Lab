@@ -130,7 +130,7 @@ class Policy_net(nn.Module):
         x = F.tanh(self.fc1(x))
         x = F.tanh(self.fc2(x))        
         if self.has_continuous_action_space:
-            mu = self.mu(x).squeeze()
+            mu = self.mu(x)
             logstd = self.logstd.expand_as(mu)
             std = torch.exp(logstd)
             dist = Normal(mu, std)

@@ -18,26 +18,24 @@ class Q_Learning(VRL):
 
     def train(self):
         start = time.time()
-        while self.episode < self.max_epochs and self.timestep < self.max_timesteps:
+        while self.episode.sum() < self.max_epochs and self.timestep.sum() < self.max_timesteps:
             cur_s, _ = self.env.reset()
             reach_maxTimestep = False
-            epoch_reward = 0
-            a = self.act(cur_s)
+            a = self.act(cur_s).item()
             while True:
                 if self.alg_name == "Q_Learning":
-                    a = self.act(cur_s)
+                    a = self.act(cur_s).item()
                     next_s, reward, terminated, truncated, info = self.env.step(a)
-                    self._update(cur_s, a, next_s, None, reward)
-                elif self.alg_name == "SARSA":
+                    report_item = self._update(cur_s, a, next_s, None, reward)
+                elif self.alg_name == "Sarsa":
                     next_s, reward, terminated, truncated, info = self.env.step(a)
-                    next_a = self.act(next_s)
-                    self._update(cur_s, a, next_s, next_a, reward)
+                    next_a = self.act(next_s).item()
+                    report_item = self._update(cur_s, a, next_s, next_a, reward)
                     a = next_a
                 cur_s = next_s
                 done = terminated or truncated
-                epoch_reward += reward
 
-                early_stop = self.monitor.timestep_report()
+                early_stop = self.monitor.timestep_report(report_item)
                 self.timestep += 1
                 reach_maxTimestep = self.timestep >= self.max_timesteps
                 if early_stop or reach_maxTimestep:
@@ -45,7 +43,6 @@ class Q_Learning(VRL):
                     
                 if done:
                     self.monitor.episode_evaluate()
-                    self.epoch_record.append(epoch_reward)
                     self.episode += 1
                     break
 
@@ -60,3 +57,5 @@ class Q_Learning(VRL):
         else:
             Q_target = r + self.gamma * self.Q[next_s][next_a]                
         self.Q[s][a] = self.Q[s][a] + self.lr * (Q_target - self.Q[s][a])
+        
+        return {"epsilon":self.epsilon.item()}

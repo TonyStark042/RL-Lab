@@ -41,8 +41,8 @@ class PPO(OnPolicy):
 
         old_states, old_actions, rewards, old_next_states, is_terminals = self._sample_all(clear=True)
         old_states = torch.tensor(old_states, device=self.device, dtype=torch.float)
-        old_actions = torch.tensor(np.array(old_actions), device=self.device).reshape(-1, self.action_dim)
-        old_log_probs = self.act_policy.actor(old_states).log_prob(old_actions.squeeze()).detach().reshape(-1, self.action_dim)
+        old_actions = torch.tensor(np.array(old_actions), device=self.device)
+        old_log_probs = self.act_policy.actor(old_states).log_prob(old_actions).detach().reshape(-1, self.action_dim) # getting log_probs from Categorical distribution need 1 dim
         old_state_values = self.act_policy.critic(old_states).detach()
 
         is_terminals = torch.tensor(is_terminals, device=self.device).int().unsqueeze(-1)
@@ -56,7 +56,7 @@ class PPO(OnPolicy):
         if self.norm_advantage:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         
-        assert (old_states.ndim == 2 and old_actions.ndim == 2) and (old_log_probs.shape == old_actions.shape) and (old_state_values.shape == advantages.shape), f"old_states shape: {old_states.shape}, old_actions shape: {old_actions.shape}, old_log_probs shape: {old_log_probs.shape}, old_state_values shape: {old_state_values.shape}, advantages shape: {advantages.shape}"
+        assert (old_states.ndim == 2 and old_log_probs.ndim == 2) and (old_state_values.shape == advantages.shape), f"old_states shape: {old_states.shape}, old_actions shape: {old_actions.shape}, old_log_probs shape: {old_log_probs.shape}, old_state_values shape: {old_state_values.shape}, advantages shape: {advantages.shape}"
         total_samples = old_states.shape[0]
 
         approx_kl_divs = []
@@ -81,7 +81,7 @@ class PPO(OnPolicy):
                 batch_returns = gae_returns[batch_indices]
 
                 dist = self.trg_policy.actor(batch_states)
-                log_probs = dist.log_prob(batch_actions.squeeze()).reshape(-1, self.action_dim)
+                log_probs = dist.log_prob(batch_actions).reshape(-1, self.action_dim)
                 dist_entropy = dist.entropy().mean()
     
                 log_ratio = log_probs.sum(-1, keepdim=True) - batch_old_log_probs.sum(-1, keepdim=True)

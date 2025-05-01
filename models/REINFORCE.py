@@ -20,7 +20,10 @@ class REINFORCE(OnPolicy):
         state = torch.from_numpy(state).float().reshape(-1, self.state_dim).to(self.device)
         dist = self.policy_net(state)
         if deterministic:
-            action = dist.probs.argmax(dim=-1)
+            if self.has_continuous_action_space:
+                action = dist.mean
+            else:
+                action = dist.probs.argmax(dim=-1)
         else:
             action = dist.sample()
         return action.detach().cpu().numpy()
@@ -31,7 +34,7 @@ class REINFORCE(OnPolicy):
         states, actions, rewards, _, _ = self._sample_all(clear=True)
         states = torch.tensor(np.array(states), device=self.device, dtype=torch.float)
         actions = torch.tensor(np.array(actions), device=self.device)
-        log_probs = self.policy_net(states).log_prob(actions.squeeze())
+        log_probs = self.policy_net(states).log_prob(actions)
 
         returns = []
         next_return = 0.0  

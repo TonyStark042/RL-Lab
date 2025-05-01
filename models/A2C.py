@@ -33,7 +33,7 @@ class A2C(OnPolicy):
         states = torch.tensor(states, device=self.device, dtype=torch.float)
         actions = torch.tensor(actions, device=self.device)
         dists = self.model.actor(states)
-        log_probs = dists.log_prob(actions.squeeze()).reshape(-1, self.action_dim).sum(-1, keepdim=True)
+        log_probs = dists.log_prob(actions).reshape(-1, self.action_dim).sum(-1, keepdim=True)
         entropys = dists.entropy().reshape(-1, 1)
         values = self.model.critic(states).reshape(-1, 1)
 

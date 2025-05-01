@@ -45,16 +45,17 @@ class RLMonitor:
             return False
     
     def episode_evaluate(self):
-        if self.agent.episode_eval_freq is not None and (self.agent.episode.sum() / self.agent.num_envs) % self.agent.episode_eval_freq == 0:
+        totoal_episode = self.agent.episode.sum().item()
+        if self.agent.episode_eval_freq is not None and (totoal_episode / self.agent.num_envs) % self.agent.episode_eval_freq == 0:
             evaluate_reward = self.agent.evaluate()
             self.agent.episode_eval["rewards"].append(evaluate_reward)
-            self.agent.episode_eval["timesteps"].append(self.agent.episode)
+            self.agent.episode_eval["timesteps"].append(totoal_episode)
 
-    def learning_curve(self, mode=Literal["episode", "timestep"]):
+    def learning_curve(self, save_dir=None, mode=Literal["episode", "timestep"]):
         """
         Plot and save the learning curve with optional moving average and visualization, showing the evaluation reward, instead of training reward, the std looks low beacause uses moving average std.
         """
-        save_dir = self._check_dir()
+        save_dir = self._check_dir(save_dir)
         plt.figure(figsize=(10, 6))
         if hasattr(self.agent, 'reward_threshold') and self.agent.reward_threshold not in (None, np.inf):
             plt.axhline(y=self.agent.reward_threshold, color='r', linestyle='--', label='Reward Threshold')
@@ -102,11 +103,12 @@ class RLMonitor:
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
         self.agent.logger.info(f"Learning curve has been saved to {save_path}")   
     
-    def _check_dir(self):
+    def _check_dir(self, save_dir=None):
         """
         Check if there is the model's saving directory.
         """
-        save_dir = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}")
+        if save_dir is None:
+            save_dir = os.path.join("results", self.agent.alg_name, f"{self.agent.env_name}")
         if not os.path.exists(save_dir):
             os.makedirs(save_dir, exist_ok=True)
         return save_dir

@@ -1,5 +1,5 @@
 env_name: CartPole-v1 # CliffWalking-v0 # CartPole-v1
-alg_name: DoubleDuelingNoisyDQN # DoubleDuelingNoisyDQN
+alg_name: DQN # DoubleDuelingNoisyDQN # DoubleDuelingNoisyDQN
 lr: 0.0001
 # max_epochs: 1000
 # max_episode_steps: 300

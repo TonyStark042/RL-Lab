@@ -66,5 +66,5 @@ class DQN(OffPolicy):
         if self.noise:
             return report_dict
         else:
-            report_dict["epsilon"] = self.epsilon
+            report_dict["epsilon"] = self.epsilon.item()
             return report_dict

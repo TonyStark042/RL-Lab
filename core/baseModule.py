@@ -66,14 +66,13 @@ class RL(ABC):
         self.episode = np.zeros(self.num_envs, dtype=np.int32)
         self.optimal_reward = -np.inf
         self.best = {}
-        self.episode_record = np.zeros(self.num_envs, dtype=np.float32)
         self.timestep_eval = {"timesteps": [], "rewards": []}
         if self.episode_eval_freq is not None:
             self.episode_eval = {"timesteps": [], "rewards": []}
         self.training_time = 0
 
     @abstractmethod
-    def act(self, state, mode="train"):
+    def act(self, state, deterministic=False):
         raise NotImplementedError("Subclasses must implement act()")
 
     @abstractmethod
@@ -102,7 +101,8 @@ class RL(ABC):
                     a = self.act(self.state_normalizer(s), deterministic=True)
                 else:
                     a = self.act(s, deterministic=True)
-                s, reward, terminated, truncated, info = self.eval_env.step(a.squeeze())
+                actual_a = a.reshape(self.action_dim, ) if self.has_continuous_action_space else a.squeeze()
+                s, reward, terminated, truncated, info = self.eval_env.step(actual_a)
                 epoch_reward += reward
                 if terminated or truncated:
                     break
@@ -114,8 +114,7 @@ class RL(ABC):
         """
         Test the model's performence.
         """
-        if save_dir is None:
-            save_dir = self.monitor._check_dir()
+        save_dir = self.monitor._check_dir(save_dir)
         
         if self.alg_name in noDeepLearning:
             para = os.path.join(save_dir, "Q_table.npy")
@@ -142,7 +141,6 @@ class RL(ABC):
         running_para.pop("logger")
         running_para.pop("model_names")
         running_para.pop("env")
-        running_para.pop("mode")
         running_para.pop("has_continuous_action_space")
         if self.episode_eval_freq is None:
             running_para.pop("episode_eval_freq")
@@ -151,12 +149,11 @@ class RL(ABC):
         if self.norm_reward:
             running_para["rewardNormalizer"] = self.reward_normalizer.__dict__
 
-        if save_dir is None:
-            save_dir = self.monitor._check_dir()
+        save_dir = self.monitor._check_dir(save_dir)
         with open(os.path.join(save_dir, 'recipe.yaml'), 'w') as f:
             yaml.dump(running_para, f)
 
-        def _save_model(self, save_dir, best=True):
+        def _save_model(self, best=True):
             save_dict = {}
             if self.alg_name not in noDeepLearning:
                 for net_name in self.model_names:
@@ -171,7 +168,20 @@ class RL(ABC):
                 save_path = os.path.join(save_dir, f"Q_table.npy")
                 np.save(save_path, self.Q)
 
-        _save_model(self, save_dir, best=best)
+        def _save_eval(self):
+            if len(self.episode_eval["timesteps"]) != 0:
+                save_path = os.path.join(save_dir, 'episode_eval.npz')
+                self.episode_eval["timesteps"] = np.array(self.episode_eval["timesteps"])
+                self.episode_eval["rewards"] = np.array(self.episode_eval["rewards"])
+                np.savez(save_path, **self.episode_eval)
+            if len(self.timestep_eval["timesteps"]) != 0:
+                save_path = os.path.join(save_dir, 'timestep_eval.npz')
+                self.timestep_eval["timesteps"] = np.array(self.timestep_eval["timesteps"])
+                self.timestep_eval["rewards"] = np.array(self.timestep_eval["rewards"])
+                np.savez(save_path, **self.timestep_eval)
+
+        _save_model(self, best=best)
+        _save_eval(self)
 
     def _check_normalize(self, rewards, states, next_states):
         if self.norm_obs:
@@ -183,6 +193,13 @@ class RL(ABC):
             rewards = self.reward_normalizer.normalize(rewards) 
             self.reward_normalizer.update(rewards)
         return rewards, states, next_states
+    
+    def _check_action_dim(self, action):
+        if self.num_envs == 1:
+            actual_a = action.reshape(self.action_dim, ) if self.has_continuous_action_space else action.squeeze() # if countinuous, step action should be [array], else be an item.
+        else:
+            actual_a = action.reshape(self.num_envs, self.action_dim) if self.has_continuous_action_space else action.reshape(self.num_envs, 1)
+        return actual_a
 
 class VRL(RL):
     def __init__(self, env, args= None, **kwargs):
@@ -196,13 +213,13 @@ class VRL(RL):
         if self.epsilon_decay_flag:
             self.epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * np.exp(-1. * self.timestep *  self.epsilon_decay)
         else:
-            self.epsilon = self.epsilon_start  
+            self.epsilon = np.array(self.epsilon_start)
 
         actions = []
 
         if np.random.rand() < self.epsilon:
-            state_num = state.reshape(-1, self.state_dim).shape[0]
-            return np.random.randint(self.action_num + 1, size=state_num) # torch.randint(self.action_dim, (1,1))
+            state_num = state.reshape(-1, self.state_dim).shape[0] if type(state) == np.ndarray else 1
+            return np.random.randint(self.action_num, size=state_num) # torch.randint(self.action_dim, (1,1))
         else: 
             return self.act(state, deterministic=True)  # otherwise, choose the best action based on policy
 
