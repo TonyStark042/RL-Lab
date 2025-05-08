@@ -40,6 +40,9 @@ class RL(ABC):
         ## env related attributes ##
         self.eval_env = copy.deepcopy(self.env)
         self.action_space = self.env.action_space  # high and low are only available in continuous action space
+        if self.has_continuous_action_space:
+            assert all(abs(self.action_space.low) == abs(self.action_space.high)), "Continuous action space must be symmetric"
+            self.max_action = self.env.action_space.high[0] if hasattr(self.env.action_space, "high") else 1
         self.action_dim =  self.action_space.shape[0] if self.has_continuous_action_space else 1
         self.action_num = np.inf if self.has_continuous_action_space else self.action_space.n
         self.state_space = self.env.observation_space
@@ -79,15 +82,28 @@ class RL(ABC):
     def _update(self):
         raise NotImplementedError("Subclasses must implement _update()")
 
-    def timestep_evaluate(self, timestep):
-        """
-        Evaluate the model's performence at interval of timesteps.
-        """
-        self.timestep_eval['timesteps'].append(timestep)
-        rewards = 0
-
-        self.timestep_eval['rewards'].append(rewards)
+    def step(self, env, s , deterministic=False):
+        if hasattr(self, "expl_steps") and self.timestep.sum() < self.expl_steps:
+            a = self.env.action_space.sample().reshape(-1, self.action_dim)
+        elif self.norm_obs:
+            a = self.act(self.state_normalizer(s), deterministic=deterministic)
+        else:
+            a = self.act(s, deterministic=deterministic)
+        actual_a = a.reshape(self.action_dim, ) if self.has_continuous_action_space else a.squeeze()
+        s, reward, terminated, truncated, info = env.step(actual_a)
+        done = terminated | truncated if isinstance(terminated, np.ndarray) else np.array(terminated or truncated)
+        return s, a, reward, done, info
     
+    def reset(self, done):
+        reset_mask = {"reset_mask":done}
+        next_s = self.env.reset(options=reset_mask)[0]
+        self.episode[done] += 1
+        self.monitor.episode_evaluate()
+        if "DQN" in self.alg_name and self.noise:
+            self.policy_net.reset_noise()
+            self.target_net.reset_noise()
+        return next_s
+
     def evaluate(self):
         """
         Evaluate the model's performence in training process.
@@ -97,14 +113,9 @@ class RL(ABC):
             epoch_reward = 0
             s = self.eval_env.reset()[0]
             while True:
-                if self.norm_obs:
-                    a = self.act(self.state_normalizer(s), deterministic=True)
-                else:
-                    a = self.act(s, deterministic=True)
-                actual_a = a.reshape(self.action_dim, ) if self.has_continuous_action_space else a.squeeze()
-                s, reward, terminated, truncated, info = self.eval_env.step(actual_a)
+                s, a, reward, done, info = self.step(self.eval_env, s, deterministic=True)
                 epoch_reward += reward
-                if terminated or truncated:
+                if done:
                     break
             results.append(epoch_reward)
         rewards = np.array(results)
@@ -125,7 +136,12 @@ class RL(ABC):
             for net_name, state_dict in models_dict.items():
                 model = getattr(self, net_name)
                 model.load_state_dict(state_dict)
-        self.logger.info(f"Loading model from {para}")     
+        self.logger.info(f"Loading model from {para}")
+
+        if self.norm_obs:
+            self.state_normalizer = Normalizer.loading_normalizer(**self.stateNormalizer)
+        if self.norm_reward:
+            self.reward_normalizer = Normalizer.loading_normalizer(**self.rewardNormalizer)
         rewards = self.evaluate()
         self.logger.info(f"{self.alg_name} in {self.env_name}, Average {self.eval_epochs} reward {np.mean(rewards):.3f}, Standard deviation {np.std(rewards):.3f}")
 
@@ -145,9 +161,15 @@ class RL(ABC):
         if self.episode_eval_freq is None:
             running_para.pop("episode_eval_freq")
         if self.norm_obs:
-            running_para["stateNormalizer"] = self.state_normalizer.__dict__
+            running_para["stateNormalizer"] = dict()
+            running_para["stateNormalizer"]["mean"] = self.state_normalizer.mean
+            running_para["stateNormalizer"]["var"] = self.state_normalizer.var
+            running_para["stateNormalizer"]["count"] = self.state_normalizer.count
         if self.norm_reward:
-            running_para["rewardNormalizer"] = self.reward_normalizer.__dict__
+            running_para["rewardNormalizer"] = dict()
+            running_para["rewardNormalizer"] = self.reward_normalizer.mean
+            running_para["rewardNormalizer"]["var"] = self.reward_normalizer.var
+            running_para["rewardNormalizer"]["count"] = self.reward_normalizer.count
 
         save_dir = self.monitor._check_dir(save_dir)
         with open(os.path.join(save_dir, 'recipe.yaml'), 'w') as f:
@@ -169,10 +191,11 @@ class RL(ABC):
                 np.save(save_path, self.Q)
 
         def _save_eval(self):
-            if len(self.episode_eval["timesteps"]) != 0:
+            if self.episode_eval_freq is not None and len(self.episode_eval["timesteps"]) != 0:
                 save_path = os.path.join(save_dir, 'episode_eval.npz')
-                self.episode_eval["timesteps"] = np.array(self.episode_eval["timesteps"])
+                self.episode_eval["episodes"] = np.array(self.episode_eval["timesteps"])
                 self.episode_eval["rewards"] = np.array(self.episode_eval["rewards"])
+                self.episode_eval.pop("timesteps")
                 np.savez(save_path, **self.episode_eval)
             if len(self.timestep_eval["timesteps"]) != 0:
                 save_path = os.path.join(save_dir, 'timestep_eval.npz')
@@ -183,28 +206,29 @@ class RL(ABC):
         _save_model(self, best=best)
         _save_eval(self)
 
-    def _check_normalize(self, rewards, states, next_states):
-        if self.norm_obs:
-            states = self.state_normalizer.normalize(states)
-            next_states = self.state_normalizer.normalize(next_states)
-            all_states = np.concatenate([states, next_states], axis=0)
-            self.state_normalizer.update(all_states)
-        if self.norm_reward:
-            rewards = self.reward_normalizer.normalize(rewards) 
-            self.reward_normalizer.update(rewards)
-        return rewards, states, next_states
-    
-    def _check_action_dim(self, action):
-        if self.num_envs == 1:
-            actual_a = action.reshape(self.action_dim, ) if self.has_continuous_action_space else action.squeeze() # if countinuous, step action should be [array], else be an item.
-        else:
-            actual_a = action.reshape(self.num_envs, self.action_dim) if self.has_continuous_action_space else action.reshape(self.num_envs, 1)
-        return actual_a
+    def record_video(self, save_dir=None):
+        frames = []
+        s = self.eval_env.reset()[0]
+        while True:
+            a = self.act(s, deterministic=True)
+            s, reward, terminated, truncated, info = self.eval_env.step(a)
+            frame = self.eval_env.render()
+            frames.append(frame)
+            if terminated or truncated:
+                break
+
+
+    def a2a(self, action):
+        """Convert action to the action space of the environment."""
+        if self.has_continuous_action_space:
+            action = action*self.max_action
+        return action
 
 class VRL(RL):
     def __init__(self, env, args= None, **kwargs):
         super().__init__(env=env, args=args, **kwargs)
         self.noise = True if "Noisy" in self.alg_name else False
+        self.expl_steps = args.expl_steps
 
     def epsilon_greedy(self, state):
         """
@@ -227,9 +251,6 @@ class VRL(RL):
 class PRL(RL):
     def __init__(self, env, args = None,**kwargs):
         super().__init__(env=env, args=args, **kwargs)
-        if self.has_continuous_action_space:
-            assert all(abs(self.action_space.low) == abs(self.action_space.high)), "Continuous action space must be symmetric"
-        self.max_action = self.env.action_space.high[0] if hasattr(self.env.action_space, "high") else 1
     
     @torch.no_grad()
     def gae(self, td_delta, is_terninated):

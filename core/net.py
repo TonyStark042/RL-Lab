@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from torch.distributions import Categorical, MultivariateNormal, Normal
-
+import numpy as np
 
 class Q_net(nn.Module):
     def __init__(self, state_dim, action_num, h_size, noise=False, std_init=0.1):
@@ -151,19 +151,6 @@ class Critic_Vnet(nn.Module):   # To estimate the value of state
         x = F.relu(self.fc2(x))
         return self.fc3(x)
 
-class Critic_Qnet(nn.Module):  # To estimate the value of state-action pair
-    def __init__(self, state_dim, action_dim, h_size):
-        super().__init__()
-        self.fc1 = nn.Linear(state_dim + action_dim, h_size)
-        self.fc2 = nn.Linear(h_size, h_size*2)
-        self.fc3 = nn.Linear(h_size*2, 1)
-
-    def forward(self, state, action):
-        x = torch.cat([state, action], dim=-1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
-
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, h_size, has_continuous_action_space):
         super(ActorCritic, self).__init__()
@@ -181,18 +168,43 @@ class Determin_PolicyNet(nn.Module): # It is not recommended to be used in discr
         super().__init__()
         self.action_dim = action_dim
         self.fc1 = nn.Linear(state_dim, h_size)
-        self.fc2 = nn.Linear(h_size, h_size*2)
-        self.fc3 = nn.Linear(h_size*2, action_dim)
+        self.fc2 = nn.Linear(h_size, h_size)
+        self.fc3 = nn.Linear(h_size, action_dim)
         # Initialize all network weights and biases with small values
-        self.fc1.weight.data.mul_(0.1)
-        self.fc1.bias.data.mul_(0.0)
-        self.fc2.weight.data.mul_(0.1)
-        self.fc2.bias.data.mul_(0.0)
-        self.fc3.weight.data.mul_(0.1)
-        self.fc3.bias.data.mul_(0.0)
+        self.apply(weight_init)
+        nn.init.uniform_(self.fc3.weight.data, -3e-3, 3e-3)
+        nn.init.uniform_(self.fc3.bias.data, -3e-3, 3e-3)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.tanh(self.fc3(x))
         return x
+    
+class Critic_Qnet(nn.Module):  # To estimate the value of state-action pair
+    def __init__(self, state_dim, action_dim, h_size):
+        super().__init__()
+        self.fc1 = nn.Linear(state_dim + action_dim, h_size)
+        self.fc2 = nn.Linear(h_size, h_size)
+        self.fc3 = nn.Linear(h_size, 1)
+        self.apply(weight_init)
+        nn.init.uniform_(self.fc3.weight.data, -3e-3, 3e-3)
+        nn.init.uniform_(self.fc3.bias.data, -3e-3, 3e-3)
+
+    def forward(self, state, action):
+        x = torch.cat([state, action], dim=-1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
+
+
+def weight_init(m):
+    if isinstance(m, nn.Linear):
+        nn.init.orthogonal_(m.weight.data)
+        if hasattr(m.bias, 'data'):
+            m.bias.data.fill_(0.0)
+    elif isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        gain = nn.init.calculate_gain('relu')
+        nn.init.orthogonal_(m.weight.data, gain)
+        if hasattr(m.bias, 'data'):
+            m.bias.data.fill_(0.0)

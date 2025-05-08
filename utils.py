@@ -109,3 +109,20 @@ def make_env(env_name, max_episode_steps=None):
         return env
     return _init  # must return a function
 
+class MyGym(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+
+    def reset(self, init_state=None):
+        if init_state is not None:
+            self.env.unwrapped.state = init_state
+            info = None
+        else:
+            init_state, info = self.env.reset()
+        return init_state, info
+
+if __name__ == "__main__":
+    env = gym.make("CartPole-v1", render_mode="rgb_array")
+    env = MyGym(env)
+    print(env.reset(init_state=np.array([0, 0, 0, 0])))
+    

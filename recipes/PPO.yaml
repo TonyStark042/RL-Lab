@@ -1,4 +1,4 @@
-env_name: Pendulum-v1 # Pendulum-v1 # HalfCheetah-v5  # CartPole-v1 Pendulum-v1
+env_name: HalfCheetah-v5 # Pendulum-v1 # HalfCheetah-v5  # CartPole-v1 Pendulum-v1
 max_timesteps: 1000000
 # max_epochs: 1000
 h_size: 128

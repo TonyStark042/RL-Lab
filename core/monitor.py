@@ -31,7 +31,7 @@ class RLMonitor:
                     self.agent.best[net_name] = model
 
             # if self.agent.timestep % self.agent.report_freq == 0:
-            message = f"Timestep: {total_timestep} | Average_{self.agent.window_size}_reward: {avg_n_reward:.3f} | Evaluation reward: {mean_evaluate_reward: .3f} | History optimal: {self.agent.optimal_reward: .3f} "
+            message = f"Timestep: {total_timestep} | Avg_{self.agent.window_size}_R: {avg_n_reward:.3f} | Eval R: {mean_evaluate_reward: .3f} | Best R: {self.agent.optimal_reward: .3f} | T: {self._seconds_to_hms(self.agent.training_time)}"
             for k,v in report_dict.items():
                 message += f"| {k}: {v:.3f}"
             self.agent.logger.info(message)
@@ -57,8 +57,8 @@ class RLMonitor:
         """
         save_dir = self._check_dir(save_dir)
         plt.figure(figsize=(10, 6))
-        if hasattr(self.agent, 'reward_threshold') and self.agent.reward_threshold not in (None, np.inf):
-            plt.axhline(y=self.agent.reward_threshold, color='r', linestyle='--', label='Reward Threshold')
+        # if hasattr(self.agent, 'reward_threshold') and self.agent.reward_threshold not in (None, np.inf):
+        #     plt.axhline(y=self.agent.reward_threshold, color='r', linestyle='--', label='Reward Threshold')
         plt.axhline(y=self.agent.optimal_reward, color='green', linestyle='--', label='Optimal Reward')
 
         name = mode
@@ -147,6 +147,11 @@ class RLMonitor:
             print(tplt.format(str(k), str(v).replace(" ", ''), str(type(v))))
         
         print(''.join(['=']*140))
+
+    def _seconds_to_hms(self, seconds):
+        hours, remainder = divmod(int(seconds), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     def grad_report(self, *nets):
         max_grad = float('-inf')

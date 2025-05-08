@@ -83,26 +83,23 @@ class BasicArgs:
     def __post_init__(self):
         if "PYTEST_CURRENT_TEST" in os.environ:
             return
-        base_args, _ = parser.parse_known_args()
-        if base_args.config:
-            recipe_path = base_args.config
-            if not os.path.exists(recipe_path):
-                raise FileNotFoundError(f"Recipe file {recipe_path} not found.")
-            else:
-                para_dict = self._read_recipe(recipe_path)
-                for k, v in para_dict.items():
-                    if k in self.__dict__:
-                        setattr(self, k, v)
-                    else:
-                        logger.warning(f"{k} is not a valid argument. Ignoring it.")
-                else:
-                    logger.info(f"Loading recipe file {recipe_path} successfully, unspecified parameters will use default values.")
         else:
             args = parser.parse_args()
-            for k, v in vars(args).items():
+            para_dict = vars(args)
+            if hasattr(args, "config"):
+                recipe_path = args.config
+                if not os.path.exists(recipe_path):
+                    raise FileNotFoundError(f"Recipe file {recipe_path} not found.")
+                else:
+                    recipe_dict = self._read_recipe(recipe_path)
+            para_dict.update(recipe_dict)
+
+            for k, v in para_dict.items():
                 if k in self.__dict__:
                     if v is not None:
                         setattr(self, k, v)
+                    else:
+                        logger.warning(f"{k} is not a valid argument. Ignoring it.")
             else:
                 logger.info("Loading command line arguments successfully, unspecified parameters will use default values.")
             
@@ -118,6 +115,7 @@ class VRLArgs(BasicArgs):
     epsilon_decay:float = 0.002
     epsilon_decay_flag:bool = True
     lr:float = 1e-4
+    expl_steps:int = 2000
 
 @dataclass(kw_only=True, frozen=False)
 class PRLArgs(BasicArgs):
@@ -159,6 +157,10 @@ class DDPGArgs(BasicArgs):
     batch_size:int = 256
     noise_type:str = "Gaussian"
     tau:float = 0.01 # soft update
+    expl_steps:int = 2000
+
+class TD3Args(DDPGArgs):
+    pass
 
 ARGS_MAP = {
     "Q_Learning": VRLArgs,
@@ -168,4 +170,5 @@ ARGS_MAP = {
     "PPO": PPOArgs,
     "DQN": DQNArgs,
     "DDPG": DDPGArgs,
+    "TD3": TD3Args,
 }

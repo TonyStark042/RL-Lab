@@ -12,6 +12,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import MODEL_MAP
 from core.args import ARGS_MAP
 
+all_algorithms = list(MODEL_MAP.keys()) + ["DoubleDuelingNoisyDQN"]
+discrete_only_algorithms = ["DQN", "DoubleDuelingNoisyDQN", "Sarsa", "Q_Learning"]
+continuous_algorithms = [algo for algo in all_algorithms if algo not in discrete_only_algorithms]
+
 class TestTrain:
     def setup_class(self):
         self.discrete_config = {
@@ -27,15 +31,7 @@ class TestTrain:
             "episode_eval_freq": 1,
         }
 
-    @pytest.mark.parametrize("alg_name", [
-        "Q_Learning",
-        "Sarsa",
-        "REINFORCE",
-        "A2C",
-        "PPO",
-        "DQN",
-        "DoubleDuelingNoisyDQN"
-    ])
+    @pytest.mark.parametrize("alg_name", all_algorithms)
     def test_discrete(self, alg_name):
         if alg_name in noDeepLearning:
             cur_config = self.discrete_config.copy()
@@ -45,19 +41,13 @@ class TestTrain:
             cur_config = self.discrete_config
         self._run_train(alg_name, cur_config)
 
-    @pytest.mark.parametrize("alg_name", [
-        "REINFORCE",
-        "A2C",
-        "PPO",
-        "DDPG",
-    ])
+    @pytest.mark.parametrize("alg_name", continuous_algorithms)
     def test_continuous(self, alg_name):
         self._run_train(alg_name, self.continuous_config)
 
     @pytest.mark.parametrize("alg_name", [
         "A2C",
         "PPO",
-        "DDPG",
     ])
     def test_parallel_training(self, alg_name):
         parallel_config = self.continuous_config.copy()
