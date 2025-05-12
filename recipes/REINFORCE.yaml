@@ -1,4 +1,5 @@
 env_name: CartPole-v1
+alg_name: REINFORCE
 max_timesteps: 10000
 # max_epochs: 1000
 early_stop: True

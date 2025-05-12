@@ -1,7 +1,7 @@
 env_name: CliffWalking-v0  # only support discrete observation space environments
 alg_name: Sarsa # Q_Learning
 # max_epochs: 1000
-max_timesteps: 1000
+max_timesteps: 10000
 max_episode_steps: 300
 epsilon_decay_flag: True
 lr: 0.3

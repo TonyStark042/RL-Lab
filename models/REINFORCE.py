@@ -11,16 +11,16 @@ import numpy as np
 class REINFORCE(OnPolicy):
     def __init__(self, env, args:REINFORCEArgs):       
         super().__init__(env=env, args=args, model_names=["policy_net"])
-        action_shape = self.action_dim if self.has_continuous_action_space else self.action_num
-        self.policy_net = Policy_net(self.state_dim, action_shape, self.h_size, self.has_continuous_action_space).to(self.device)
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
-        self.buffer = EpisodeBuffer(capacity=self.max_episode_steps)
+        action_shape = self.env.action_dim if self.env.has_continuous_action_space else self.env.action_num
+        self.policy_net = Policy_net(self.env, self.cfg.h_size).to(self.device)
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.cfg.lr)
+        self.buffer = EpisodeBuffer(capacity=self.cfg.max_episode_steps)
     
     def act(self, state, deterministic=False):
-        state = torch.from_numpy(state).float().reshape(-1, self.state_dim).to(self.device)
+        state = torch.from_numpy(state).float().reshape(-1, self.env.state_dim).to(self.device)
         dist = self.policy_net(state)
         if deterministic:
-            if self.has_continuous_action_space:
+            if self.env.has_continuous_action_space:
                 action = dist.mean
             else:
                 action = dist.probs.argmax(dim=-1)
@@ -39,12 +39,12 @@ class REINFORCE(OnPolicy):
         returns = []
         next_return = 0.0  
         for reward in rewards[::-1]:
-            cur_return = reward + self.gamma * next_return
+            cur_return = reward + self.cfg.gamma * next_return
             next_return = cur_return
             returns.append(cur_return)
         returns.reverse()
         for log_prob, disc_return in zip(log_probs, returns):
-            policy_reward += (-log_prob.sum(-1) * (disc_return - self.baseline)).sum()       # log_prob * disc_return，but the default gradient descent direction is "-"，Adding "-" means gradient rise.
+            policy_reward += (-log_prob.sum(-1) * (disc_return - self.cfg.baseline)).sum()       # log_prob * disc_return，but the default gradient descent direction is "-"，Adding "-" means gradient rise.
                                        
         self.optimizer.zero_grad()
         policy_reward.backward()

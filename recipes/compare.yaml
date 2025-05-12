@@ -1,34 +1,25 @@
 common_args:
-  env_name: CartPole-v1
-  train_mode: timestep
-  max_timesteps: 50000
-  eval_freq: 100
-  report_freq: 100
+  env_name: Pendulum-v1
+  max_timesteps: 100000
+  eval_freq: 1000
   window_size: 10
-  max_episode_steps: 500
-  reward_threshold: 475.0
   early_stop: false
+  h_size: 128
+  # norm_obs: True
+  # norm_reward: True
 PPO:
-  baseline: 0
-  actor_lr: 0.0005
+  actor_lr: 0.0003
   critic_lr: 0.0002
-  entropy_coef: 0.0001
-  h_size: 64
-  eps_clip: 0.2
-  gamma: 0.99
-  is_gae: true
   gae_lambda: 0.95
-  horizon: 100
-  update_times: 5
+  update_times: 10
+  horizon: 256
+  batch_size: 128
+  target_kl: 0.05
+A2C:
+  actor_lr: 0.0003
+  critic_lr: 0.0002
+  horizon: 256
+  batch_size: 128
 REINFORCE:
-  baseline: 0
-  h_size: 32
   gamma: 0.99
   lr: 0.0003
-A2C:
-  baseline: 0
-  h_size: 64
-  gamma: 0.99
-  gae_lambda: 0.95
-  actor_lr: 0.0005
-  critic_lr: 0.0002

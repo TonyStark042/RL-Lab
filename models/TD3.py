@@ -11,24 +11,24 @@ import torch.nn.functional as F
 class TD3(OffPolicy):
     def __init__(self, env, args):
         super().__init__(env=env, args=args, model_names=["actor", "critic1"],)
-        self.buffer = ReplayBuffer(capacity=self.memory_size)
-        self.noise = OUNoise(env.action_space, decay_period=self.max_timesteps) if self.noise_type == "OU" else GaussianNoise(env.action_space)
-        self.actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
-        self.critic1 = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
-        self.critic2 = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
-        self.trg_actor = Determin_PolicyNet(self.state_dim, self.action_dim, self.h_size).to(self.device)
-        self.trg_critic1 = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
-        self.trg_critic2 = Critic_Qnet(self.state_dim, self.action_dim, self.h_size).to(self.device)
+        self.buffer = ReplayBuffer(capacity=self.cfg.memory_size)
+        self.noise = OUNoise(env.action_space, decay_period=self.cfg.max_timesteps) if self.cfg.noise_type == "OU" else GaussianNoise(env.action_space)
+        self.actor = Determin_PolicyNet(self.env, self.cfg.h_size).to(self.device)
+        self.critic1 = Critic_Qnet(self.env, self.cfg.h_size).to(self.device)
+        self.critic2 = Critic_Qnet(self.env, self.cfg.h_size).to(self.device)
+        self.trg_actor = Determin_PolicyNet(self.env, self.cfg.h_size).to(self.device)
+        self.trg_critic1 = Critic_Qnet(self.env, self.cfg.h_size).to(self.device)
+        self.trg_critic2 = Critic_Qnet(self.env, self.cfg.h_size).to(self.device)
         self.trg_actor.load_state_dict(self.actor.state_dict())
         self.trg_critic1.load_state_dict(self.critic1.state_dict())
         self.trg_critic2.load_state_dict(self.critic2.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), self.actor_lr)
-        self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), self.critic_lr)
-        self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), self.critic_lr)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), self.cfg.actor_lr)
+        self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), self.cfg.critic_lr)
+        self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), self.cfg.critic_lr)
     
     @torch.no_grad()
     def act(self, state, deterministic=False): 
-        state = torch.FloatTensor(state).to(self.device).reshape(-1, self.state_dim)
+        state = torch.FloatTensor(state).to(self.device).reshape(-1, self.env.state_dim)
         action = self.actor(state).cpu().numpy()
         action = self.a2a(action)
         if not deterministic:
@@ -36,9 +36,9 @@ class TD3(OffPolicy):
         return action
 
     def _update(self):
-        if len(self.buffer) < self.expl_steps:
+        if len(self.buffer) < self.cfg.expl_steps:
             return {}
-        state, action, reward, next_state, done = self._sample(self.batch_size)
+        state, action, reward, next_state, done = self._sample(self.cfg.batch_size)
         state = torch.FloatTensor(state).to(self.device)
         next_state = torch.FloatTensor(next_state).to(self.device)
         action = torch.FloatTensor(action).to(self.device)
@@ -50,7 +50,7 @@ class TD3(OffPolicy):
         next_action = self.trg_actor(next_state)
         next_Q1_value, next_Q2_value = self.trg_critic1(next_state, next_action), self.trg_critic2(next_state, next_action)
         next_Q = torch.min(next_Q1_value, next_Q2_value)
-        target_Q_value = reward + (1 - done) * self.gamma * next_Q
+        target_Q_value = reward + (1 - done) * self.cfg.gamma * next_Q
         critic1_loss = F.mse_loss(Q1_value, target_Q_value.detach())
         critic2_loss = F.mse_loss(Q2_value, target_Q_value.detach())
         self.critic1_optimizer.zero_grad()
@@ -72,12 +72,12 @@ class TD3(OffPolicy):
 
         # soft update
         for param, target_param in zip(self.critic1.parameters(), self.trg_critic1.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            target_param.data.copy_(self.cfg.tau * param.data + (1 - self.cfg.tau) * target_param.data)
         for param, target_param in zip(self.critic2.parameters(), self.trg_critic2.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            target_param.data.copy_(self.cfg.tau * param.data + (1 - self.cfg.tau) * target_param.data)
 
         for param, target_param in zip(self.actor.parameters(), self.trg_actor.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            target_param.data.copy_(self.cfg.tau * param.data + (1 - self.cfg.tau) * target_param.data)
 
         return {"actor_Q": actor_loss.item(), "critic1_loss": critic1_loss.item()}
 

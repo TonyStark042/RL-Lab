@@ -1,21 +1,16 @@
 import gymnasium as gym
-from models import MODEL_MAP
-from utils import get_name
-from core.args import ARGS_MAP
+from core.args import set_args
+from typing import Optional
+from utils import create_agent
 
-def main():
-    alg_name = get_name()
-    args_name = alg_name if "DQN" not in alg_name else "DQN"
-    args = ARGS_MAP.get(args_name)(alg_name=alg_name)
-    MODEL_CLASS = MODEL_MAP.get(args_name)
-
-    env = gym.make(args.env_name, render_mode="rgb_array", max_episode_steps=args.max_episode_steps)
-    agent = MODEL_CLASS(env, args)
+def main(yaml_path:Optional[str]):
+    args = set_args(yaml_path=yaml_path)
+    agent = create_agent(args["alg_name"], args, multi_env=True, load=False)
     agent.train()
     agent.save()
     agent.monitor.learning_curve(mode="timestep")
-    if agent.episode_eval_freq is not None:
+    if args.episode_eval_freq is not None:
         agent.monitor.learning_curve(mode="episode")
 
 if __name__ == "__main__":
-    main()
+    main(yaml_path="recipes/PPO.yaml")

@@ -1,5 +1,6 @@
-env_name: HalfCheetah-v5  # CartPole-v1 # Pendulum-v1 # HalfCheetah-v5 
-max_timesteps: 1000000
+env_name: Pendulum-v1  # CartPole-v1 # Pendulum-v1 # HalfCheetah-v5 
+alg_name: TD3
+max_timesteps: 100000
 h_size: 256
 actor_lr: 0.0003
 critic_lr: 0.0003
@@ -7,5 +8,5 @@ batch_size: 256
 memory_size: 30000
 tau: 0.005
 norm_obs: True
-expl_steps: 20000
+expl_steps: 2000
 eval_freq: 1000

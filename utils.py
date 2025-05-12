@@ -1,128 +1,59 @@
+from models import MODEL_MAP
+from core.args import ARGS_MAP
 import gymnasium as gym
-import sys
+from omegaconf import OmegaConf
+from gymnasium.wrappers import RecordVideo
+from core.args import ARGS_MAP
+import os
 import numpy as np
-from typing import Literal
-import logging
-from tqdm import tqdm
+import torch
+from core import noDeepLearning
 
-class Normalizer:
-    """
-    Normalizer class for normalizing state and reward.
-    """
-    def __init__(self, dim, clip=10):
-        self.clip = clip
-        self.count = 0
-        self.dim = dim
-        self.mean = np.zeros(dim)
-        self.var = np.ones(dim)
-        name = "reward_normalizer" if dim == 1 else "state_normalizer"
-        self.logger = logging.getLogger(name=name)
-
-    @classmethod
-    def init_normalizer(cls, env, mode:Literal["state", "reward"], epochs=10):
-        """
-        Initialize the normalizer by randomly sampling from the environment.
-        """
-        samples = []
-        if mode == "state":
-            dim = env.observation_space.shape[0]
-        elif mode == "reward":
-            dim = 1
-
-        normalizer = cls(dim=dim, clip=10)
-
-        for epoch in tqdm(range(epochs), desc=f"Initializing {mode}_normalizer"):
-            obs = env.reset()
-            while True:
-                action = env.action_space.sample()  # random explore
-                obs, reward, teminate, truncate, info = env.step(action)
-                if mode == "state":
-                    samples.append(obs)
-                elif mode == "reward":
-                    samples.append(reward)
-                if teminate or truncate:
-                    break
-        else:
-            env.reset()
-        normalizer.update(np.array(samples))
-        normalizer.logger.info(f"{mode}_normalizer have been initialized, mean: {normalizer.mean}, var: {normalizer.var}")
-        return normalizer
-
-    @classmethod
-    def loading_normalizer(cls, mean: np.ndarray, var: np.ndarray, count: int, clip=10):
-        normalizer = cls(dim=mean.shape[0], clip=clip)
-        normalizer.mean = mean
-        normalizer.var = var
-        normalizer.count = count
-        return normalizer
-
-    def normalize(self, x):
-        """
-        Normalize the input values.
-        """
-        std = np.maximum(np.sqrt(self.var), 1e-6)
-        normalized_x = (x - self.mean) / std
-        return np.clip(normalized_x, -self.clip, self.clip)
-    
-    def update(self, batch_values):
-        """
-        Update the normalizer with new batch values.
-        """
-        batch_values = np.array(batch_values).reshape(-1, self.dim)
-        batch_count =  batch_values.shape[0]
-        batch_mean = np.mean(batch_values, axis=0)
-        batch_var = np.var(batch_values, axis=0)
-        self.update_from_moments(batch_mean, batch_var, batch_count)
-
-    def update_from_moments(self, batch_mean: np.ndarray, batch_var: np.ndarray, batch_count: int) -> None:
-        delta = batch_mean - self.mean
-        tot_count = self.count + batch_count
-
-        new_mean = self.mean + delta * batch_count / tot_count
-        m_a = self.var * self.count
-        m_b = batch_var * batch_count
-        m_2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count) # Pooled Variance Formula
-        new_var = m_2 / (self.count + batch_count)
-
-        new_count = batch_count + self.count
-
-        self.mean = new_mean
-        self.var = new_var
-        self.count = new_count
-    
-    def __call__(self, x):
-        return self.normalize(x)
-
-def get_name():
-    for i, arg in enumerate(sys.argv):
-        if arg == '--alg_name':
-            if i + 1 < len(sys.argv):
-                alg_name = sys.argv[i + 1]
-                break
-    else:
-        raise ValueError("Algorithm name not found in command line arguments.")
-    return alg_name
-
-def make_env(env_name, max_episode_steps=None):
+def make_env(env_name, max_episode_steps=None, record_video=False, video_dir=None):
     def _init():
         env = gym.make(env_name, render_mode="rgb_array", max_episode_steps=max_episode_steps)
+        if record_video:
+            env = RecordVideo(
+                env,
+                video_folder=video_dir,
+                episode_trigger=lambda ep: ep % 10 == 0,
+                name_prefix=env_name,
+                fps=60,
+            )
         return env
     return _init  # must return a function
 
-class MyGym(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-
-    def reset(self, init_state=None):
-        if init_state is not None:
-            self.env.unwrapped.state = init_state
-            info = None
-        else:
-            init_state, info = self.env.reset()
-        return init_state, info
-
-if __name__ == "__main__":
-    env = gym.make("CartPole-v1", render_mode="rgb_array")
-    env = MyGym(env)
-    print(env.reset(init_state=np.array([0, 0, 0, 0])))
+def create_agent(alg_name:str, *args, multi_env=True, load=False):
+    args_name = next((i for i in ARGS_MAP.keys() if i in alg_name), None)
+    ARG_class = ARGS_MAP.get(args_name)
     
+    # Set the parameters for the algorithm
+    default_cfg = OmegaConf.structured(ARG_class)
+    default_cfg["alg_name"] = alg_name
+    total_args = OmegaConf.merge(default_cfg, *args)
+    total_args = OmegaConf.to_object(total_args)
+
+    # create the new agent
+    model_class = MODEL_MAP.get(args_name)
+    if multi_env:
+        env = gym.vector.AsyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps) 
+                for _ in range(total_args.num_envs)])
+    else:
+        env = gym.vector.SyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps)])
+    agent = model_class(env, total_args)
+
+    # Load the model
+    if load:
+        save_dir = agent.monitor._check_dir()
+        if alg_name in noDeepLearning:
+            para = os.path.join(save_dir, "Q_table.npy")
+            agent.Q = np.load(para, allow_pickle=True)
+        else:
+            para = os.path.join(save_dir, "weight.pth")
+            models_dict = torch.load(para)
+            for net_name, state_dict in models_dict.items():
+                model = getattr(agent, net_name)
+                model.load_state_dict(state_dict)
+        agent.logger.info(f"Loading model from {para}")
+        
+    return agent

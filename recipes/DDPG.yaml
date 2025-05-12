@@ -1,4 +1,5 @@
-env_name: HalfCheetah-v5  # CartPole-v1 # Pendulum-v1 # HalfCheetah-v5 
+env_name: HalfCheetah-v5  # CartPole-v1 # Pendulum-v1 # HalfCheetah-v5
+alg_name: DDPG
 max_timesteps: 1000000
 h_size: 256
 actor_lr: 0.0003

@@ -3,19 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from torch.distributions import Categorical, MultivariateNormal, Normal
-import numpy as np
+from core.env import WrappedEnv
 
 class Q_net(nn.Module):
-    def __init__(self, state_dim, action_num, h_size, noise=False, std_init=0.1):
+    def __init__(self, env:WrappedEnv, h_size, noise=False, std_init=0.1):
         super().__init__()
         self.noise = noise
-        self.fc1 = nn.Linear(state_dim, h_size)
+        self.fc1 = nn.Linear(env.state_dim, h_size)
         if self.noise == True:
             self.fc2 = NoisyLinear(h_size, h_size*2, std_init=std_init)
-            self.fc3 = NoisyLinear(h_size*2, action_num, std_init=std_init)
+            self.fc3 = NoisyLinear(h_size*2, env.action_num, std_init=std_init)
         else:
             self.fc2 = nn.Linear(h_size, h_size*2)
-            self.fc3 = nn.Linear(h_size*2, action_num)
+            self.fc3 = nn.Linear(h_size*2, env.action_num)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -31,18 +31,18 @@ class Q_net(nn.Module):
             self.fc3.reset_noise()
 
 class Dueling_Q_net(nn.Module):
-    def __init__(self, state_dim, action_num, h_size, noise=False, std_init=0.1):
+    def __init__(self, env:WrappedEnv, h_size, noise=False, std_init=0.1):
         super().__init__()
         self.noise = noise
-        self.fc1 = nn.Linear(state_dim, h_size)
+        self.fc1 = nn.Linear(env.state_dim, h_size)
         if self.noise == True:
             self.fc2 = NoisyLinear(h_size, h_size*2, std_init=std_init)
             self.fc3 = NoisyLinear(h_size*2, 1, std_init=std_init)
-            self.fc4 = NoisyLinear(h_size*2, action_num, std_init=std_init)
+            self.fc4 = NoisyLinear(h_size*2, env.action_num, std_init=std_init)
         else:
             self.fc2 = nn.Linear(h_size, h_size*2)
             self.fc3 = nn.Linear(h_size*2, 1)
-            self.fc4 = nn.Linear(h_size*2, action_num)
+            self.fc4 = nn.Linear(h_size*2, env.action_num)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -111,18 +111,16 @@ class NoisyLinear(nn.Module):
         return x
 
 class Policy_net(nn.Module):
-    def __init__(self, state_dim, action_dim, h_size, has_continuous_action_space=False):
+    def __init__(self, env:WrappedEnv, h_size):
         super().__init__()
-        self.has_continuous_action_space = has_continuous_action_space
-        self.fc1 = nn.Linear(state_dim, h_size)
+        self.has_continuous_action_space = env.has_continuous_action_space
+        self.fc1 = nn.Linear(env.state_dim, h_size)
         self.fc2 = nn.Linear(h_size, h_size*2)
-        if has_continuous_action_space:
-            self.logstd = nn.Parameter(torch.zeros(action_dim))
-            self.mu = nn.Linear(h_size*2, action_dim)
-            # self.mu.weight.data.mul_(0.1)
-            # self.mu.bias.data.mul_(0.0)
+        if self.has_continuous_action_space:
+            self.logstd = nn.Parameter(torch.zeros(env.action_dim))
+            self.mu = nn.Linear(h_size*2, env.action_dim)
         else:
-            self.fc3 = nn.Linear(h_size*2, action_dim)
+            self.fc3 = nn.Linear(h_size*2, env.action_num)
 
     def forward(self, x):
         # x = F.relu(self.fc1(x))
@@ -140,9 +138,9 @@ class Policy_net(nn.Module):
         return dist
 
 class Critic_Vnet(nn.Module):   # To estimate the value of state
-    def __init__(self, state_dim, h_size):
+    def __init__(self, env:WrappedEnv, h_size):
         super().__init__()
-        self.fc1 = nn.Linear(state_dim, h_size)
+        self.fc1 = nn.Linear(env.state_dim, h_size)
         self.fc2 = nn.Linear(h_size, h_size*2)
         self.fc3 = nn.Linear(h_size*2, 1)
 
@@ -152,11 +150,10 @@ class Critic_Vnet(nn.Module):   # To estimate the value of state
         return self.fc3(x)
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim, h_size, has_continuous_action_space):
-        super(ActorCritic, self).__init__()
-        self.has_continuous_action_space = has_continuous_action_space
-        self.critic = Critic_Vnet(state_dim, h_size)
-        self.actor = Policy_net(state_dim, action_dim, h_size, has_continuous_action_space)
+    def __init__(self, env:WrappedEnv, h_size):
+        super().__init__()
+        self.critic = Critic_Vnet(env, h_size)
+        self.actor = Policy_net(env, h_size)
 
     def forward(self, x):
         value = self.critic(x)
@@ -164,12 +161,12 @@ class ActorCritic(nn.Module):
         return dist, value
 
 class Determin_PolicyNet(nn.Module): # It is not recommended to be used in discrete action space, so only support continuous.  
-    def __init__(self, state_dim, action_dim, h_size):
+    def __init__(self, env:WrappedEnv, h_size):
         super().__init__()
-        self.action_dim = action_dim
-        self.fc1 = nn.Linear(state_dim, h_size)
+        self.action_dim = env.action_dim
+        self.fc1 = nn.Linear(env.state_dim, h_size)
         self.fc2 = nn.Linear(h_size, h_size)
-        self.fc3 = nn.Linear(h_size, action_dim)
+        self.fc3 = nn.Linear(h_size, env.action_dim)
         # Initialize all network weights and biases with small values
         self.apply(weight_init)
         nn.init.uniform_(self.fc3.weight.data, -3e-3, 3e-3)
@@ -182,9 +179,9 @@ class Determin_PolicyNet(nn.Module): # It is not recommended to be used in discr
         return x
     
 class Critic_Qnet(nn.Module):  # To estimate the value of state-action pair
-    def __init__(self, state_dim, action_dim, h_size):
+    def __init__(self, env:WrappedEnv, h_size):
         super().__init__()
-        self.fc1 = nn.Linear(state_dim + action_dim, h_size)
+        self.fc1 = nn.Linear(env.state_dim + env.action_dim, h_size)
         self.fc2 = nn.Linear(h_size, h_size)
         self.fc3 = nn.Linear(h_size, 1)
         self.apply(weight_init)
