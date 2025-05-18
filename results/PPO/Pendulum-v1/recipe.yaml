@@ -1,28 +1,365 @@
-actor_lr: 0.0003
-alg_name: PPO
-batch_size: 128
-critic_lr: 0.0002
-early_stop: true
-entropy_coef: 1.984841779938021e-05
-entropy_decay: 0.99
-env_name: Pendulum-v1
-episode_eval_freq: null
-eps_clip: 0.2
-eval_epochs: 10
-eval_freq: 1000
-gae_lambda: 0.95
-gamma: 0.99
-h_size: 128
-horizon: 256
-max_episode_steps: 200
-max_epochs: .inf
-max_timesteps: 100000.0
-norm_advantage: false
-norm_obs: true
-norm_reward: true
-num_envs: 1
-reward_threshold: .inf
-save_dir: results/PPO/Pendulum-v1
-target_kl: 0.05
-update_times: 10
-window_size: 10
+_content: &id002
+  actor_lr: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: actor_lr
+      object_type: &id001 !!python/name:builtins.float ''
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - &id004 !!python/name:builtins.dict ''
+    _parent: &id006 !!python/object:omegaconf.dictconfig.DictConfig
+      _content: *id002
+      _metadata: !!python/object:omegaconf.base.ContainerMetadata
+        element_type: &id003 !!python/name:typing.Any ''
+        flags: &id009 {}
+        flags_root: false
+        key: null
+        key_type: *id003
+        object_type: &id010 !!python/name:core.args.PPOArgs ''
+        optional: true
+        ref_type: *id003
+        resolver_cache: &id011 !!python/object/apply:collections.defaultdict
+        - *id004
+      _parent: null
+    _val: 0.0003
+  alg_name: !!python/object:omegaconf.nodes.StringNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: alg_name
+      object_type: &id005 !!python/name:builtins.str ''
+      optional: false
+      ref_type: *id005
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: PPO
+  batch_size: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: batch_size
+      object_type: &id007 !!python/name:builtins.int ''
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 128
+  critic_lr: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: critic_lr
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.0002
+  early_stop: !!python/object:omegaconf.nodes.BooleanNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: early_stop
+      object_type: &id008 !!python/name:builtins.bool ''
+      optional: false
+      ref_type: *id008
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: false
+  entropy_coef: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: entropy_coef
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.0008953382542587163
+  entropy_decay: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: entropy_decay
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.99
+  env_name: !!python/object:omegaconf.nodes.StringNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: env_name
+      object_type: *id005
+      optional: false
+      ref_type: *id005
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: Pendulum-v1
+  episode_eval_freq: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: episode_eval_freq
+      object_type: *id007
+      optional: true
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: null
+  eps_clip: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: eps_clip
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.2
+  eval_epochs: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: eval_epochs
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 10
+  eval_freq: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: eval_freq
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 1000
+  gae_lambda: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: gae_lambda
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.95
+  gamma: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: gamma
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.99
+  h_size: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: h_size
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 128
+  horizon: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: horizon
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 256
+  max_episode_steps: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: max_episode_steps
+      object_type: *id007
+      optional: true
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 200
+  max_epochs: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: max_epochs
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: .inf
+  max_timesteps: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: max_timesteps
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 3000.0
+  norm_advantage: !!python/object:omegaconf.nodes.BooleanNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: norm_advantage
+      object_type: *id008
+      optional: false
+      ref_type: *id008
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: false
+  norm_obs: !!python/object:omegaconf.nodes.BooleanNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: norm_obs
+      object_type: *id008
+      optional: false
+      ref_type: *id008
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: false
+  norm_reward: !!python/object:omegaconf.nodes.BooleanNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: norm_reward
+      object_type: *id008
+      optional: false
+      ref_type: *id008
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: false
+  num_envs: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: num_envs
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 1
+  reward_threshold: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: reward_threshold
+      object_type: *id001
+      optional: true
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: .inf
+  save_dir: !!python/object:omegaconf.nodes.StringNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: save_dir
+      object_type: *id005
+      optional: true
+      ref_type: *id005
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: results/PPO/Pendulum-v1
+  target_kl: !!python/object:omegaconf.nodes.FloatNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: target_kl
+      object_type: *id001
+      optional: false
+      ref_type: *id001
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 0.05
+  update_times: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: update_times
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 10
+  window_size: !!python/object:omegaconf.nodes.IntegerNode
+    _metadata: !!python/object:omegaconf.base.Metadata
+      flags: {}
+      flags_root: false
+      key: window_size
+      object_type: *id007
+      optional: false
+      ref_type: *id007
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id004
+    _parent: *id006
+    _val: 10
+_flags_cache:
+  convert: null
+  readonly: null
+  struct: null
+_metadata: !!python/object:omegaconf.base.ContainerMetadata
+  element_type: *id003
+  flags: *id009
+  flags_root: false
+  key: null
+  key_type: *id003
+  object_type: *id010
+  optional: true
+  ref_type: *id003
+  resolver_cache: *id011
+_parent: null

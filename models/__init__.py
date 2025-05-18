@@ -6,6 +6,7 @@ from models.A2C import A2C
 from models.DQN_Series import DQN
 from models.DDPG import DDPG
 from models.TD3 import TD3
+from models.SAC import SAC
 
 MODEL_MAP = {
     "Q_Learning": Q_Learning,
@@ -15,5 +16,6 @@ MODEL_MAP = {
     "PPO": PPO,
     "DQN": DQN,
     "DDPG": DDPG,
-    "TD3": TD3
+    "TD3": TD3,
+    "SAC": SAC,
 }

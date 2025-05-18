@@ -11,7 +11,7 @@ import yaml
 from core.utils import Normalizer
 from core.args import BasicArgs, VRLArgs, PRLArgs
 from core.env import WrappedEnv
-from typing import Generic, TypeVar, Optional
+from typing import Generic, TypeVar, Optional, Literal
 
 A = TypeVar('Args', bound='BasicArgs')
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -49,6 +49,8 @@ class RL(ABC, Generic[A]):
         self.cfg.max_episode_steps = spec.max_episode_steps
         if self.cfg.reward_threshold is None or self.cfg.reward_threshold == 0:
             self.cfg.reward_threshold = np.inf if spec.reward_threshold is None else spec.reward_threshold
+        if self.cfg.save_dir is None:
+            self.cfg.save_dir = os.path.join("results", self.cfg.alg_name, f"{self.cfg.env_name}")
 
     def _setup_normalizers(self):
         """Set up state and reward normalizers if needed"""
@@ -85,8 +87,8 @@ class RL(ABC, Generic[A]):
     def _update(self):
         raise NotImplementedError("Subclasses must implement _update()")
 
-    def step(self, env, s , deterministic=False):
-        if hasattr(self.cfg, "expl_steps") and self.timestep.sum() < self.cfg.expl_steps:
+    def step(self, env, s , deterministic=False, mode:Literal["train", "test"]="train"):
+        if hasattr(self.cfg, "expl_steps") and self.timestep.sum() < self.cfg.expl_steps and mode != "test":
             a = self.env.action_space.sample().reshape(-1, self.env.action_dim)
         elif self.cfg.norm_obs:
             a = self.act(self.state_normalizer(s), deterministic=deterministic)

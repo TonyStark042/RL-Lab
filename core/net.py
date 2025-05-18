@@ -110,6 +110,27 @@ class NoisyLinear(nn.Module):
         x = x.sign().mul(x.abs().sqrt())
         return x
 
+class SAC_PolicyNet(nn.Module): 
+    def __init__(self, env:WrappedEnv, h_size):
+        super().__init__()
+        self.action_dim = env.action_dim
+        self.fc1 = nn.Linear(env.state_dim, h_size)
+        self.fc2 = nn.Linear(h_size, h_size)
+        self.mu = nn.Linear(h_size, env.action_dim)
+        self.logstd = nn.Linear(h_size, env.action_dim)
+        self.max_logstd = 2
+        self.min_logstd = -20
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        mu = self.mu(x)
+        logstd = self.logstd(x)
+        logstd = torch.clamp(logstd, min=self.min_logstd, max=self.max_logstd)
+        std = torch.exp(logstd)
+        dist = Normal(mu, std)
+        return dist
+
 class Policy_net(nn.Module):
     def __init__(self, env:WrappedEnv, h_size):
         super().__init__()

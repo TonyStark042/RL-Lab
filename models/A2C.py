@@ -6,6 +6,8 @@ from torch import optim
 import torch
 import numpy as np
 from core.buffer import HorizonBuffer
+import torch.nn.functional as F
+
 
 class A2C(OnPolicy[A2CArgs]):
     def __init__(self, env, args:A2CArgs) -> None:
@@ -36,17 +38,29 @@ class A2C(OnPolicy[A2CArgs]):
         entropys = dists.entropy().reshape(-1, 1)
         values = self.model.critic(states).reshape(-1, 1)
 
-        returns = []
-        next_return = 0.0
-        for reward, done  in zip(rewards[::-1], dones[::-1]):
-            cur_return = reward + self.cfg.gamma * next_return * (1 - done)
-            next_return = cur_return
-            returns.append(cur_return)
-        returns.reverse()
-        returns = torch.tensor(returns, device=self.device).detach().reshape(-1, 1)
-        advantage = returns - values
-        critic_loss = advantage.pow(2).mean()
-        actor_loss  = -(log_probs * advantage.detach()).mean()
+        # normal returns
+        # returns = []
+        # next_return = 0.0
+        # for reward, done  in zip(rewards[::-1], dones[::-1]):
+        #     cur_return = reward + self.cfg.gamma * next_return * (1 - done)
+        #     next_return = cur_return
+        #     returns.append(cur_return)
+        # advantages = returns - values
+        # returns.reverse()
+
+        next_states_values = self.model.critic(states).detach()
+        dones = torch.tensor(dones, device=self.device).int().reshape(-1, 1)
+        rewards = torch.tensor(rewards, device=self.device, dtype=torch.float).reshape(-1, 1)
+
+        td_target = rewards + self.cfg.gamma * next_states_values * (1 - dones)
+        td_delta = td_target - values
+        advantages = self.gae(td_delta.cpu(), dones.cpu()).to(self.device).detach()
+        if self.cfg.norm_advantage:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        returns = advantages + values
+        
+        critic_loss = F.mse_loss(values, returns)
+        actor_loss  = -(log_probs * advantages.detach()).mean()
         loss = actor_loss + 0.5 * critic_loss - self.cfg.entropy_coef * entropys.mean()
 
         self.actor_optimizer.zero_grad()

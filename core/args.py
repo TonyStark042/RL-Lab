@@ -68,6 +68,7 @@ class DQNArgs(VRLArgs):
     sync_freq:int = 64   # sync target network with policy network
     memory_size:int = 6000
     batch_size:int = 32
+    expl_steps:int = 0
     # NoisyDQN
     std_init:float = 0.5
 
@@ -81,8 +82,19 @@ class DDPGArgs(BasicArgs):
     tau:float = 0.01 # soft update
     expl_steps:int = 0
 
+@dataclass(kw_only=True, frozen=False)
 class TD3Args(DDPGArgs):
     pass
+
+@dataclass(kw_only=True, frozen=False)
+class SACArgs(BasicArgs):
+    actor_lr:float = 3e-4
+    critic_lr:float = 2e-4
+    memory_size:int = 10000
+    batch_size:int = 256
+    tau:float = 0.01
+    expl_steps:int = 0
+    alpha:float = 0.12
 
 
 ARGS_MAP = {
@@ -94,6 +106,7 @@ ARGS_MAP = {
     "DQN": DQNArgs,
     "DDPG": DDPGArgs,
     "TD3": TD3Args,
+    "SAC": SACArgs,
 }
 
 def set_args(yaml_path:Optional[str]=None) -> BasicArgs:

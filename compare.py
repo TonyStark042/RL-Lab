@@ -9,4 +9,3 @@ if __name__ == "__main__":
     comparator = Comparator.initialize(recipe_path="recipes/compare.yaml")
     comparator.train_all()
     comparator.learning_curve()
-    comparator.save_all()

@@ -4,9 +4,9 @@ common_args:
   eval_freq: 1000
   window_size: 10
   early_stop: false
-  h_size: 128
-  # norm_obs: True
-  # norm_reward: True
+  h_size: 256
+  norm_obs: True
+  norm_reward: True
 PPO:
   actor_lr: 0.0003
   critic_lr: 0.0002

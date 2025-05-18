@@ -8,6 +8,7 @@ import os
 import numpy as np
 import torch
 from core import noDeepLearning
+from core.baseModule import RL
 
 def make_env(env_name, max_episode_steps=None, record_video=False, video_dir=None):
     def _init():
@@ -23,7 +24,7 @@ def make_env(env_name, max_episode_steps=None, record_video=False, video_dir=Non
         return env
     return _init  # must return a function
 
-def create_agent(alg_name:str, *args, multi_env=True, load=False):
+def create_agent(alg_name:str, *args, multi_env=True, load=False) -> RL:
     args_name = next((i for i in ARGS_MAP.keys() if i in alg_name), None)
     ARG_class = ARGS_MAP.get(args_name)
     
@@ -39,7 +40,10 @@ def create_agent(alg_name:str, *args, multi_env=True, load=False):
         env = gym.vector.AsyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps) 
                 for _ in range(total_args.num_envs)])
     else:
-        env = gym.vector.SyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps)])
+        if load:  # load means in test mode
+            env = gym.vector.SyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps, record_video=True, video_dir=total_args.save_dir)])
+        else:
+            env = gym.vector.SyncVectorEnv([make_env(total_args.env_name, total_args.max_episode_steps)])
     agent = model_class(env, total_args)
 
     # Load the model

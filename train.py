@@ -13,4 +13,4 @@ def main(yaml_path:Optional[str]):
         agent.monitor.learning_curve(mode="episode")
 
 if __name__ == "__main__":
-    main(yaml_path="recipes/PPO.yaml")
+    main(yaml_path="recipes/PPO.yaml") # Don't have to change this line, you can set yaml_path by command line yaml_path=<your_path>
